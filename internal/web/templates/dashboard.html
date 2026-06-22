@@ -97,6 +97,7 @@ th { color: var(--text-dim); font-weight: 500; font-size: 11px; text-transform: 
         <a data-tab="servers">Servers</a>
         <a data-tab="logs">Logs</a>
         <a data-tab="settings">Settings</a>
+        <a data-tab="docs">Docs</a>
     </div>
     <a id="nav-crafty" style="font-size:11px;color:var(--text-dim);text-decoration:none;" target="_blank"></a>
 </nav>
@@ -213,6 +214,61 @@ th { color: var(--text-dim); font-weight: 500; font-size: 11px; text-transform: 
             <h2>DuckDNS Subdomains</h2>
             <p style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">Suggested subdomains for your servers. All resolve to the same IP via DuckDNS wildcard.</p>
             <div id="duckdns-suggestions" style="font-family:var(--mono);font-size:12px;color:var(--text);"></div>
+        </div>
+    </div>
+
+    <!-- DOCS -->
+    <div class="tab" id="tab-docs">
+        <div class="card">
+            <h2>DuckDNS — How to create subdomains</h2>
+            <p style="font-size:12px;color:var(--text-dim);margin-bottom:14px;">Each Minecraft server needs its own hostname. DuckDNS supports wildcards — all subdomains of your base domain resolve to the same IP. The proxy routes by hostname.</p>
+            <div style="display:grid;gap:10px;grid-template-columns:1fr 1fr;margin-bottom:14px;">
+                <div>
+                    <label style="font-size:11px;color:var(--text-dim);display:block;margin-bottom:4px;">Your base DuckDNS domain</label>
+                    <input type="text" id="duck-base" placeholder="minecraftamigos.duckdns.org" style="width:100%;">
+                </div>
+                <div>
+                    <label style="font-size:11px;color:var(--text-dim);display:block;margin-bottom:4px;">Server name</label>
+                    <input type="text" id="duck-server" placeholder="survival" style="width:100%;">
+                </div>
+            </div>
+            <button class="btn btn-accent btn-sm" onclick="generateSubdomain()">Generate</button>
+            <div id="duck-result" style="margin-top:12px;font-family:var(--mono);font-size:14px;color:var(--green);font-weight:600;"></div>
+            <p style="font-size:11px;color:var(--text-dim);margin-top:8px;">Use this hostname when importing a server on the <b>Settings</b> page.</p>
+        </div>
+        <div class="card">
+            <h2>Proxmox Setup</h2>
+            <p style="font-size:12px;color:var(--text-dim);margin-bottom:8px;">Create an API token with minimum permissions for LXC management.</p>
+            <ol style="font-size:12px;color:var(--text-dim);padding-left:18px;line-height:1.8;">
+                <li>Log into Proxmox: <code style="color:var(--accent);">https://PROXMOX_HOST:8006</code></li>
+                <li>Datacenter → Permissions → API Tokens → Add</li>
+                <li>User: <code style="color:var(--accent);">root@pam</code> — Token ID: <code style="color:var(--accent);">mc-wake-proxy</code></li>
+                <li>Copy the secret UUID immediately</li>
+                <li>Permissions → Add → API Token Permission → Path <code style="color:var(--accent);">/vms/LXC_ID</code> → Role <code style="color:var(--accent);">PVEVMUser</code></li>
+                <li>Run <code style="color:var(--accent);">hostname</code> on Proxmox — use that for <code style="color:var(--accent);">PROXMOX_NODE</code></li>
+            </ol>
+            <p style="font-size:11px;color:var(--text-dim);margin-top:8px;">Full guide: <a href="https://github.com/mefrraz/mc-wake-proxy/blob/master/docs/proxmox-setup.md" target="_blank" style="color:var(--accent);">docs/proxmox-setup.md</a></p>
+        </div>
+        <div class="card">
+            <h2>Crafty Controller Setup</h2>
+            <p style="font-size:12px;color:var(--text-dim);margin-bottom:8px;">Generate an API token and enable status visibility.</p>
+            <ol style="font-size:12px;color:var(--text-dim);padding-left:18px;line-height:1.8;">
+                <li>Open Crafty: <code style="color:var(--accent);">https://CRAFTY_HOST:8443</code></li>
+                <li>Username menu → API Tokens → Create</li>
+                <li>Copy the token immediately</li>
+                <li>For each server: Server Configuration → Show Status → ON</li>
+                <li>Server ID is in the URL: <code style="color:var(--accent);">.../server_detail?id=UUID</code></li>
+            </ol>
+            <p style="font-size:11px;color:var(--text-dim);margin-top:8px;">Full guide: <a href="https://github.com/mefrraz/mc-wake-proxy/blob/master/docs/crafty-setup.md" target="_blank" style="color:var(--accent);">docs/crafty-setup.md</a></p>
+        </div>
+        <div class="card">
+            <h2>Multi-Server Routing</h2>
+            <p style="font-size:12px;color:var(--text-dim);margin-bottom:8px;">Players connect to different hostnames; the proxy reads the Minecraft handshake and routes to the correct backend.</p>
+            <table style="font-size:12px;">
+                <tr><td style="padding:4px 8px;color:var(--text-dim);">survival.minecraftamigos.duckdns.org</td><td style="padding:4px 8px;">→</td><td style="padding:4px 8px;font-family:var(--mono);">192.168.1.131:25566</td></tr>
+                <tr><td style="padding:4px 8px;color:var(--text-dim);">creative.minecraftamigos.duckdns.org</td><td style="padding:4px 8px;">→</td><td style="padding:4px 8px;font-family:var(--mono);">192.168.1.131:25567</td></tr>
+            </table>
+            <p style="font-size:11px;color:var(--text-dim);margin-top:8px;">Full guide: <a href="https://github.com/mefrraz/mc-wake-proxy/blob/master/docs/multi-server.md" target="_blank" style="color:var(--accent);">docs/multi-server.md</a></p>
         </div>
     </div>
 </main>
@@ -517,6 +573,18 @@ function importDiscovered(id, name, ip, port) {
             document.getElementById('discover-list').innerHTML = '<span style="color:var(--green);">Server imported: ' + esc(hostname) + '</span>';
             updateSettings(); updateDashboard();
         });
+}
+
+function generateSubdomain() {
+    var base = document.getElementById('duck-base').value.trim();
+    var name = document.getElementById('duck-server').value.trim().toLowerCase().replace(/\s+/g,'-');
+    if (!base || !name) {
+        document.getElementById('duck-result').textContent = 'Fill in both fields above.';
+        document.getElementById('duck-result').style.color = 'var(--orange)';
+        return;
+    }
+    document.getElementById('duck-result').textContent = name + '.' + base;
+    document.getElementById('duck-result').style.color = 'var(--green)';
 }
 
 // ---- Init ----
