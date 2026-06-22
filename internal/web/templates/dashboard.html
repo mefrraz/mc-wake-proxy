@@ -138,6 +138,16 @@
             </div>
         </div>
 
+        <div class="card" id="health-card">
+            <h2>Connections</h2>
+            <div id="health-checks" style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;">
+                <span id="hc-proxmox">⏳ Proxmox</span>
+                <span id="hc-crafty">⏳ Crafty</span>
+                <span id="hc-wol">⏳ WOL</span>
+                <span id="hc-backend">⏳ Backend</span>
+            </div>
+        </div>
+
         <div class="card">
             <h2>Event Log</h2>
             <div class="logs" id="logs">Loading...</div>
@@ -191,6 +201,22 @@
                     const el = document.getElementById('logs');
                     el.textContent = logs.join('\n');
                     el.scrollTop = el.scrollHeight;
+                })
+                .catch(() => {});
+
+            fetch('/api/health')
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.checks) return;
+                    data.checks.forEach(function(c) {
+                        var id = 'hc-' + c.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+                        var el = document.getElementById(id);
+                        if (!el) return;
+                        var icon = c.ok ? '✅' : '❌';
+                        el.textContent = icon + ' ' + c.name;
+                        el.title = c.message || '';
+                        el.style.color = c.ok ? 'var(--green)' : 'var(--red)';
+                    });
                 })
                 .catch(() => {});
         }

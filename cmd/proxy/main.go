@@ -34,6 +34,22 @@ func main() {
 
 	p := proxy.New(cfg, state, wolSender, pmClient, cmClient)
 
+	// Run startup health checks so the user sees what's wrong immediately.
+	result := proxy.RunHealthChecks(cfg, pmClient, cmClient)
+	for _, hc := range result.Checks {
+		if hc.OK {
+			state.Logf("HEALTH: %s ✅ — %s", hc.Name, hc.Message)
+		} else {
+			state.Logf("HEALTH: %s ❌ — %s", hc.Name, hc.Message)
+		}
+	}
+	if !result.AllOK {
+		state.Logf("HEALTH: ⚠️  Some checks failed — review the messages above. Proxy will still start.")
+	}
+
+	// Store health result in state so /api/health can serve it.
+	state.SetHealth(result)
+
 	// Start dashboard in background.
 	go web.Start(state, cfg.WebPort)
 

@@ -96,11 +96,13 @@ Based on the values above, set these in your `docker-compose.yml`:
 ```yaml
 - PROXMOX_HOST=<your-proxmox-ip>
 - PROXMOX_PORT=8006
-- PROXMOX_NODE=<node-name>           # e.g. pve
+- PROXMOX_NODE=<node-name>           # Run 'hostname' on Proxmox host to find this
 - PROXMOX_LXC_ID=<lxc-id>            # e.g. 100
 - PROXMOX_TOKEN_ID=root@pam!mc-wake-proxy
 - PROXMOX_TOKEN_SECRET=a1b2c3d4-e5f6-7890-abcd-ef1234567890
 - PROXMOX_INSECURE_SKIP_VERIFY=true  # Proxmox default cert is self-signed
 ```
+
+> **Finding PROXMOX_NODE**: SSH into your Proxmox host and run `hostname`. Use exactly that value. It is **not** always `pve` — that's just a common default. Examples: `proserver`, `pve-node`, `proxmox`.
 
 > **Security note**: `PROXMOX_INSECURE_SKIP_VERIFY=true` skips TLS certificate verification. This is acceptable on a **trusted home LAN** where the risk of MITM is negligible. If you have configured a legitimate TLS certificate on Proxmox, set this to `false`.

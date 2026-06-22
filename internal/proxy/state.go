@@ -74,7 +74,8 @@ type State struct {
 	logs      []string
 	logMaxLen int
 
-	lang string
+	lang   string
+	health HealthResult
 }
 
 // NewState returns an initialized State with the given locale.
@@ -250,4 +251,18 @@ func (s *State) SetLang(lang string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.lang = lang
+}
+
+// SetHealth stores the result of startup health checks.
+func (s *State) SetHealth(h HealthResult) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.health = h
+}
+
+// Health returns the stored health check result.
+func (s *State) Health() HealthResult {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.health
 }

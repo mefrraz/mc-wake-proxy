@@ -49,6 +49,12 @@ func Start(state *proxy.State, addr string) {
 		json.NewEncoder(w).Encode(state.Logs())
 	})
 
+	// API: health checks.
+	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(state.Health())
+	})
+
 	state.Logf("WEB: dashboard listening on %s", addr)
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		state.Logf("WEB: server error: %v", err)
