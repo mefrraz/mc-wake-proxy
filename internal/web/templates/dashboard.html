@@ -460,7 +460,7 @@ function discoverServers() {
             html += '<tr>';
             html += '<td><b>' + esc(s.name) + '</b></td>';
             html += '<td style="font-family:var(--mono);color:var(--text-dim);">' + esc(s.ip) + ':' + s.port + '</td>';
-            html += '<td style="text-align:right;"><button class="btn btn-green btn-sm" onclick="importDiscovered(\'' + escq(s.id) + '\',\'' + escq(s.name) + '\',\'' + escq(s.ip) + '\',' + s.port + ')">Import</button></td>';
+            html += '<td style="text-align:right;"><button class="btn btn-green btn-sm" onclick="alert(\'import click: ' + escq(s.name) + '\');importDiscovered(\'' + escq(s.id) + '\',\'' + escq(s.name) + '\',\'' + escq(s.ip) + '\',' + s.port + ')">Import</button></td>';
             html += '</tr>';
         });
         html += '</table>';
