@@ -159,37 +159,42 @@ func (p *Proxy) handleLogin(client net.Conn, hs *mcproto.Handshake, hsRaw, lsRaw
 }
 
 // wakeSequence runs the full Proxmox → LXC → Crafty → Minecraft chain.
+// It checks before acting at each phase — if the host is already awake, the LXC
+// already running, or the Minecraft server already started, that step is skipped.
 func (p *Proxy) wakeSequence() {
 	cooldown := time.Duration(p.cfg.CoolDownMinutes) * time.Minute
 	deadline := time.Now().Add(cooldown)
 
-	// Phase 1: Wake Proxmox host.
+	// Phase 1: Ensure Proxmox host is reachable.
 	p.state.SetPhase(PhaseWakingHost)
-	p.state.Logf("WOL: sending magic packet to %s via %s", p.cfg.WOLMAC, p.cfg.WOLBroadcast)
-	if err := p.wol.Send(p.cfg.WOLMAC, p.cfg.WOLBroadcast); err != nil {
-		p.state.Logf("WOL: error: %v", err)
+	_, err := p.proxmox.GetLXCStatus(p.cfg.ProxmoxNode, p.cfg.ProxmoxLXCID)
+	if err == nil {
+		p.state.Logf("PROXMOX: host already reachable — skipping WOL")
 	} else {
-		p.state.Logf("WOL: magic packet sent")
+		p.state.Logf("PROXMOX: host not reachable (%v) — sending WOL to %s", err, p.cfg.WOLMAC)
+		if werr := p.wol.Send(p.cfg.WOLMAC, p.cfg.WOLBroadcast); werr != nil {
+			p.state.Logf("WOL: error: %v", werr)
+		} else {
+			p.state.Logf("WOL: magic packet sent")
+		}
+		firstFail := true
+		for time.Now().Before(deadline) {
+			_, err := p.proxmox.GetLXCStatus(p.cfg.ProxmoxNode, p.cfg.ProxmoxLXCID)
+			if err == nil {
+				p.state.Logf("PROXMOX: host is now reachable")
+				break
+			}
+			if firstFail {
+				p.state.Logf("PROXMOX: error: %v", err)
+				firstFail = false
+			}
+			p.state.Logf("PROXMOX: waiting for host to wake...")
+			time.Sleep(5 * time.Second)
+		}
 	}
 
-	firstFail := true
-	for time.Now().Before(deadline) {
-		_, err := p.proxmox.GetLXCStatus(p.cfg.ProxmoxNode, p.cfg.ProxmoxLXCID)
-		if err == nil {
-			break
-		}
-		if firstFail {
-			p.state.Logf("PROXMOX: error: %v", err)
-			firstFail = false
-		}
-		p.state.Logf("PROXMOX: waiting for host to wake...")
-		time.Sleep(5 * time.Second)
-	}
-
-	// Phase 2: Ensure LXC running.
+	// Phase 2: Ensure LXC is running.
 	p.state.SetPhase(PhaseWaitingLXC)
-	p.state.Logf("PROXMOX: checking LXC %s on node %s", p.cfg.ProxmoxLXCID, p.cfg.ProxmoxNode)
-
 	lxcRunning := false
 	for time.Now().Before(deadline) {
 		status, err := p.proxmox.GetLXCStatus(p.cfg.ProxmoxNode, p.cfg.ProxmoxLXCID)
@@ -199,8 +204,8 @@ func (p *Proxy) wakeSequence() {
 			continue
 		}
 		if status.Status == "running" {
+			p.state.Logf("PROXMOX: LXC already running — skipping start")
 			lxcRunning = true
-			p.state.Logf("PROXMOX: LXC is running")
 			break
 		}
 		p.state.Logf("PROXMOX: LXC is %s — starting...", status.Status)
@@ -209,25 +214,28 @@ func (p *Proxy) wakeSequence() {
 		}
 		time.Sleep(5 * time.Second)
 	}
-
 	if !lxcRunning {
 		p.state.Logf("PROXMOX: LXC did not start — giving up")
 		p.state.SetOffline()
 		return
 	}
 
-	// Phase 3: Start Minecraft via Crafty, poll with Crafty API.
+	// Phase 3: Ensure Minecraft server is running via Crafty.
 	p.state.SetPhase(PhaseStartingMC)
-	p.state.Logf("CRAFTY: starting server %s", p.cfg.CraftyServerID)
-
-	time.Sleep(3 * time.Second) // let Crafty be reachable
-
-	if err := p.crafty.StartServer(p.cfg.CraftyServerID); err != nil {
-		p.state.Logf("CRAFTY: start error: %v", err)
+	info, err := p.crafty.GetServerStatus(p.cfg.CraftyServerID)
+	if err == nil && info.Running {
+		p.state.Logf("CRAFTY: server already running — skipping start")
 	} else {
-		p.state.Logf("CRAFTY: start_server command sent")
+		p.state.Logf("CRAFTY: starting server %s", p.cfg.CraftyServerID)
+		time.Sleep(3 * time.Second) // let Crafty be reachable if LXC just booted
+		if err := p.crafty.StartServer(p.cfg.CraftyServerID); err != nil {
+			p.state.Logf("CRAFTY: start error: %v", err)
+		} else {
+			p.state.Logf("CRAFTY: start_server command sent")
+		}
 	}
 
+	// Poll until Minecraft backend is reachable.
 	for time.Now().Before(deadline) {
 		info, err := p.crafty.GetServerStatus(p.cfg.CraftyServerID)
 		if err == nil && info.Running {
