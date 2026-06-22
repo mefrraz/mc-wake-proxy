@@ -241,18 +241,15 @@ func (p *Proxy) handleStatus(client net.Conn, hs *mcproto.Handshake) {
 	_, _ = mcproto.ReadVarInt(client)
 
 	lp := p.state.LangPack()
-	phase := p.state.Phase()
+	hostname := hs.ServerAddress
 
 	var motd string
-	switch phase {
-	case PhaseReady:
+	if p.state.IsOnline(hostname) {
 		motd = lp.MotdReady
-	default:
-		if p.state.IsBooting() {
-			motd = lp.MotdBooting
-		} else {
-			motd = lp.MotdOffline
-		}
+	} else if p.state.IsBooting() {
+		motd = lp.MotdBooting
+	} else {
+		motd = lp.MotdOffline
 	}
 
 	st := p.state.Status()
@@ -307,7 +304,8 @@ func (p *Proxy) handleLogin(client net.Conn, hs *mcproto.Handshake, hsRaw, lsRaw
 		return
 	}
 
-	if !p.state.CanStartWake() {
+	if !p.state.CanStartWake(hostname) {
+		p.state.Logf("MC: wake blocked for %s (phase=%s)", hostname, p.state.Phase())
 		p.kickClient(client, p.state.LangPack().KickOffline)
 		return
 	}
@@ -424,7 +422,7 @@ func (p *Proxy) proxyToBackend(client net.Conn, hsRaw, lsRaw []byte, backend str
 	if err != nil {
 		p.state.Logf("PROXY: backend %s unreachable: %v", backend, err)
 		p.state.SetOffline("")
-		if p.state.CanStartWake() {
+		if p.state.CanStartWake("") {
 			p.state.SetPhase(PhaseWakingHost)
 			go p.wakeSequence("", backend, p.cfg.CraftyServerID)
 		}

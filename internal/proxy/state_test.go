@@ -16,7 +16,7 @@ func TestNewStateDefaults(t *testing.T) {
 	if s.IsBooting() {
 		t.Fatal("expected not booting")
 	}
-	if s.CanStartWake() != true {
+	if s.CanStartWake("") != true {
 		t.Fatal("expected CanStartWake true")
 	}
 	st := s.Status()
@@ -35,7 +35,7 @@ func TestPhaseTransitions(t *testing.T) {
 	if !s.IsBooting() {
 		t.Fatal("expected IsBooting true in PhaseWakingHost")
 	}
-	if s.CanStartWake() {
+	if s.CanStartWake("") {
 		t.Fatal("expected CanStartWake false while booting")
 	}
 

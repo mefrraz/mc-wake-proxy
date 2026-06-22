@@ -146,11 +146,23 @@ func (s *State) PhaseElapsed() time.Duration {
 	return time.Since(s.phaseSince)
 }
 
-// CanStartWake returns true if the proxy is not already in a wake sequence and the server is not online.
-func (s *State) CanStartWake() bool {
+// CanStartWake returns true if a wake can be triggered for a specific hostname.
+func (s *State) CanStartWake(hostname string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.phase == PhaseIdle && !s.serverOnline
+	if s.phase != PhaseIdle {
+		return false
+	}
+	if hostname != "" {
+		if ss, ok := s.servers[hostname]; ok {
+			return !ss.online
+		}
+		// Multi-server with unknown hostname: can start wake.
+		if len(s.servers) > 0 {
+			return true
+		}
+	}
+	return !s.serverOnline
 }
 
 // IsOnline returns true if a specific backend is online.
