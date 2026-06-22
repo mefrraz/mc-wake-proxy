@@ -16,10 +16,13 @@ type ServerEntry struct {
 
 // DiscoveredServer is a server found via Crafty API for the Discover feature.
 type DiscoveredServer struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	IP   string `json:"ip"`
-	Port int    `json:"port"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	IP      string `json:"ip"`
+	Port    int    `json:"port"`
+	Players int    `json:"players,omitempty"`
+	Version string `json:"version,omitempty"`
+	Icon    string `json:"icon,omitempty"`
 }
 
 // ServersConfig is the root of servers.yml.

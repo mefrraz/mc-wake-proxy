@@ -53,6 +53,7 @@ type ServerInfo struct {
 	Version   string `json:"version"`
 	WorldName string `json:"world_name"`
 	Desc      string `json:"desc"`
+	Icon      string `json:"icon"`
 }
 
 // ServerConfigInfo holds static server configuration from Crafty.

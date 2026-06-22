@@ -64,6 +64,7 @@ type serverState struct {
 	phaseSince time.Time
 	players    int
 	playerList []string
+	logs       []string
 }
 
 // State is the global proxy state, safe for concurrent use.
@@ -355,6 +356,28 @@ func (s *State) Logf(format string, args ...interface{}) {
 	}
 }
 
+// LogfServer appends a message to a specific server's log buffer.
+func (s *State) LogfServer(hostname, format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	line := time.Now().Format("15:04:05") + "  " + msg
+	// Also log globally.
+	fmt.Println(line)
+	s.logs = append(s.logs, line)
+	if len(s.logs) > s.logMaxLen {
+		s.logs = s.logs[1:]
+	}
+	// Per-server buffer.
+	ss := s.ensureServer(hostname)
+	if ss != nil {
+		ss.logs = append(ss.logs, line)
+		if len(ss.logs) > s.logMaxLen {
+			ss.logs = ss.logs[1:]
+		}
+	}
+}
+
 // Logs returns a copy of the log buffer.
 func (s *State) Logs() []string {
 	s.mu.RLock()
@@ -362,6 +385,18 @@ func (s *State) Logs() []string {
 	out := make([]string, len(s.logs))
 	copy(out, s.logs)
 	return out
+}
+
+// ServerLogs returns the log buffer for a specific server.
+func (s *State) ServerLogs(hostname string) []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if ss, ok := s.servers[hostname]; ok && ss.logs != nil {
+		out := make([]string, len(ss.logs))
+		copy(out, ss.logs)
+		return out
+	}
+	return nil
 }
 
 // --- Localisation ---

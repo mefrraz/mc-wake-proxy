@@ -5,6 +5,7 @@ import (
 	"embed"
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/mefrraz/mc-wake-proxy/internal/proxy"
 )
@@ -45,10 +46,28 @@ func Start(state *proxy.State, addr, configPath string, reloadServers func(strin
 		})
 	})
 
-	// API: recent log lines.
+	// API: recent log lines (optionally filtered by ?hostname=X).
 	mux.HandleFunc("/api/logs", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(state.Logs())
+		hostname := r.URL.Query().Get("hostname")
+		var logs []string
+		if hostname != "" {
+			logs = state.ServerLogs(hostname)
+			if logs == nil {
+				// Fallback: filter global logs by hostname mention.
+				for _, l := range state.Logs() {
+					if strings.Contains(l, hostname) {
+						logs = append(logs, l)
+					}
+				}
+			}
+			if logs == nil {
+				logs = []string{}
+			}
+		} else {
+			logs = state.Logs()
+		}
+		json.NewEncoder(w).Encode(logs)
 	})
 
 	// API: health checks.

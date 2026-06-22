@@ -84,14 +84,22 @@ func main() {
 		var out []proxy.DiscoveredServer
 		for _, s := range list {
 			cfg, err := cmClient.GetServerConfig(s.ID)
-			if err != nil {
-				continue
+			ip := ""
+			port := 25565
+			name := s.WorldName
+			if err == nil && cfg != nil {
+				if cfg.IP != "" { ip = cfg.IP }
+				if cfg.Port != 0 { port = cfg.Port }
+				if cfg.Name != "" { name = cfg.Name }
 			}
 			out = append(out, proxy.DiscoveredServer{
-				ID:   s.ID,
-				Name: cfg.Name,
-				IP:   cfg.IP,
-				Port: cfg.Port,
+				ID:      s.ID,
+				Name:    name,
+				IP:      ip,
+				Port:    port,
+				Players: s.Online,
+				Version: s.Version,
+				Icon:    s.Icon,
 			})
 		}
 		return out, nil
