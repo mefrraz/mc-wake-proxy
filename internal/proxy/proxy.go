@@ -70,6 +70,10 @@ func (p *Proxy) StartMonitor() {
 						if p.state.IsOnline(srv.Hostname) {
 							p.state.SetOffline(srv.Hostname)
 						}
+						// Clear stopping phase once backend is confirmed down.
+						if p.state.PhaseForServer(srv.Hostname) == PhaseStopping {
+							p.state.SetPhaseForServer(srv.Hostname, PhaseIdle)
+						}
 						if !offlineLogged[srv.Hostname] {
 							p.state.Logf("MONITOR: %s (%s) is offline", srv.Hostname, srv.Backend)
 							offlineLogged[srv.Hostname] = true
@@ -246,6 +250,8 @@ func (p *Proxy) handleStatus(client net.Conn, hs *mcproto.Handshake) {
 	var motd string
 	if p.state.IsOnline(hostname) {
 		motd = lp.MotdReady
+	} else if p.state.PhaseForServer(hostname) == PhaseStopping {
+		motd = lp.MotdStopping
 	} else if p.state.PhaseForServer(hostname) != PhaseIdle && p.state.PhaseForServer(hostname) != PhaseReady {
 		motd = lp.MotdBooting
 	} else {
@@ -288,6 +294,13 @@ func (p *Proxy) handleLogin(client net.Conn, hs *mcproto.Handshake, hsRaw, lsRaw
 	if !found {
 		p.state.Logf("MC: unknown hostname %s from %s", hostname, client.RemoteAddr())
 		p.kickClient(client, "Unknown server: "+hostname+"\n\nThis proxy does not recognize this hostname.")
+		return
+	}
+
+	// If server is stopping, reject.
+	if p.state.PhaseForServer(hostname) == PhaseStopping {
+		p.state.Logf("MC: %s joining %s — server is stopping, rejecting", player, hostname)
+		p.kickClient(client, p.state.LangPack().KickStopping)
 		return
 	}
 

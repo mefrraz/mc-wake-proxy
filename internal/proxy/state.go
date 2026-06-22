@@ -15,6 +15,7 @@ const (
 	PhaseWakingHost Phase = "waking_host"
 	PhaseWaitingLXC Phase = "waiting_lxc"
 	PhaseStartingMC Phase = "starting_mc"
+	PhaseStopping   Phase = "stopping"
 	PhaseReady      Phase = "ready"
 )
 
@@ -34,26 +35,32 @@ type ServerStatus struct {
 type LangPack struct {
 	MotdOffline  string
 	MotdBooting  string
+	MotdStopping string
 	MotdReady    string
 	KickOffline  string
 	KickBooting  string
+	KickStopping string
 }
 
 var defaultLang = LangPack{
 	MotdOffline:  "§7● §cServer Offline §7- §eClick to start",
 	MotdBooting:  "§7● §eStarting server... §7[§bPlease wait§7]",
+	MotdStopping: "§7● §cShutting down... §7[§bPlease wait§7]",
 	MotdReady:    "§7● §aServer Online §7- §eJoin now!",
 	KickOffline:  "§6Server is waking up!\n\n§7The startup signal was sent.\n§ePlease wait 1-2 minutes and reconnect.",
 	KickBooting:  "§eServer is still loading...\n\n§7The world is initializing.\n§fRefresh your server list and join once ready!",
+	KickStopping: "§cServer is shutting down...\n\n§7Please wait for the server to fully stop before reconnecting.",
 }
 
 var locales = map[string]LangPack{
 	"pt": {
 		MotdOffline:  "§7● §cServidor Desligado §7- §eClica para iniciar",
 		MotdBooting:  "§7● §eA iniciar o servidor... §7[§bAguarde§7]",
+		MotdStopping: "§7● §cA desligar... §7[§bAguarde§7]",
 		MotdReady:    "§7● §aServidor Online §7- §eEntra já!",
 		KickOffline:  "§6O servidor está a ser iniciado!\n\n§7Enviámos o sinal de arranque.\n§ePor favor, aguarda 1 a 2 minutos e volta a entrar.",
 		KickBooting:  "§eO servidor ainda está a carregar...\n\n§7O mundo está a iniciar.\n§fAtualiza a lista e entra assim que estiver pronto!",
+		KickStopping: "§cO servidor está a desligar...\n\n§7Por favor, aguarda até o servidor parar completamente.",
 	},
 }
 

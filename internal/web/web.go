@@ -192,6 +192,8 @@ func Start(state *proxy.State, addr, configPath string, reloadServers func(strin
 		case "start":
 			err = startServer(craftyID)
 		case "stop":
+			state.SetPhaseForServer(hostname, proxy.PhaseStopping)
+			state.Logf("WEB: stopping %s", hostname)
 			err = stopServer(craftyID)
 		case "restart":
 			err = restartServer(craftyID)
