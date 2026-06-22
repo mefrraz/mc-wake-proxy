@@ -91,6 +91,26 @@ func (p *Proxy) StartMonitor() {
 	}()
 }
 
+// ReloadServers re-reads servers.yml and updates the proxy's routing table.
+func (p *Proxy) ReloadServers(path string) error {
+	sc, err := LoadServers(path)
+	if err != nil {
+		return err
+	}
+	p.cfg.Servers = sc
+	if sc != nil {
+		p.state.SetServerEntries(sc.Servers)
+		p.state.Logf("PROXY: reloaded %d server(s) from %s", len(sc.Servers), path)
+	} else {
+		p.state.SetServerEntries(nil)
+		p.state.Logf("PROXY: servers.yml not found — switched to single-server mode")
+	}
+	return nil
+}
+
+// ConfigPath returns the servers config path.
+func (p *Proxy) ConfigPath() string { return p.cfg.ServersPath }
+
 // resolveServer returns the backend and crafty_server_id for a hostname.
 // In multi-server mode, looks up the server entry. Falls back to global config.
 func (p *Proxy) resolveServer(hostname string) (backend, craftyServerID string) {

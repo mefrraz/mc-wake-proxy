@@ -150,16 +150,27 @@
 
         <div class="card" id="servers-card" style="display:none;">
             <h2>Servers</h2>
-            <table style="width:100%;border-collapse:collapse;">
+            <table style="width:100%;border-collapse:collapse;margin-bottom:16px;">
                 <thead>
                     <tr style="color:var(--text-dim);font-size:11px;text-transform:uppercase;">
                         <th style="text-align:left;padding:8px 4px;">Hostname</th>
                         <th style="text-align:left;padding:8px 4px;">Backend</th>
                         <th style="text-align:right;padding:8px 4px;">Status</th>
+                        <th style="width:30px;"></th>
                     </tr>
                 </thead>
                 <tbody id="servers-tbody"></tbody>
             </table>
+            <div style="border-top:1px solid var(--border);padding-top:14px;">
+                <h3 style="font-size:13px;margin-bottom:10px;">Add Server</h3>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <input type="text" id="add-hostname" placeholder="Hostname (e.g. survival.mc.example.com)" style="flex:1;min-width:180px;background:var(--bg);color:var(--text);border:1px solid var(--border);padding:8px 10px;border-radius:6px;font-size:12px;">
+                    <input type="text" id="add-backend" placeholder="Backend (IP:port)" style="flex:1;min-width:130px;background:var(--bg);color:var(--text);border:1px solid var(--border);padding:8px 10px;border-radius:6px;font-size:12px;">
+                    <input type="text" id="add-serverid" placeholder="Crafty Server ID" style="flex:1;min-width:180px;background:var(--bg);color:var(--text);border:1px solid var(--border);padding:8px 10px;border-radius:6px;font-size:12px;">
+                    <button onclick="addServer()" style="background:var(--green);color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-weight:600;font-size:12px;">Add</button>
+                </div>
+                <div id="add-error" style="color:var(--red);font-size:12px;margin-top:6px;display:none;"></div>
+            </div>
         </div>
 
         <div class="card">
@@ -253,23 +264,69 @@
                 .then(servers => {
                     const card = document.getElementById('servers-card');
                     const tbody = document.getElementById('servers-tbody');
-                    if (!servers || servers.length === 0) {
-                        card.style.display = 'none';
-                        return;
-                    }
+                    // Always show the card so users can add servers.
                     card.style.display = '';
                     let html = '';
-                    servers.forEach(function(s) {
-                        const dot = s.online ? '🟢' : '🔴';
-                        const status = s.online ? 'Online' : 'Offline';
-                        const color = s.online ? 'var(--green)' : 'var(--red)';
-                        html += '<tr>';
-                        html += '<td style="padding:8px 4px;font-family:var(--mono);font-size:13px;">' + s.hostname + '</td>';
-                        html += '<td style="padding:8px 4px;font-family:var(--mono);font-size:13px;color:var(--text-dim);">' + s.backend + '</td>';
-                        html += '<td style="padding:8px 4px;text-align:right;color:' + color + ';font-weight:600;font-size:12px;">' + dot + ' ' + status + '</td>';
-                        html += '</tr>';
-                    });
+                    if (!servers || servers.length === 0) {
+                        html = '<tr><td colspan="4" style="padding:8px;color:var(--text-dim);font-size:12px;">No servers configured — add one below.</td></tr>';
+                    } else {
+                        servers.forEach(function(s) {
+                            const dot = s.online ? '🟢' : '🔴';
+                            const status = s.online ? 'Online' : 'Offline';
+                            const color = s.online ? 'var(--green)' : 'var(--red)';
+                            html += '<tr>';
+                            html += '<td style="padding:8px 4px;font-family:var(--mono);font-size:13px;">' + s.hostname + '</td>';
+                            html += '<td style="padding:8px 4px;font-family:var(--mono);font-size:13px;color:var(--text-dim);">' + s.backend + '</td>';
+                            html += '<td style="padding:8px 4px;text-align:right;color:' + color + ';font-weight:600;font-size:12px;">' + dot + ' ' + status + '</td>';
+                            html += '<td style="text-align:right;"><button onclick="removeServer(\'' + s.hostname + '\')" style="background:none;border:1px solid var(--red);color:var(--red);border-radius:4px;cursor:pointer;font-size:11px;padding:2px 6px;">✕</button></td>';
+                            html += '</tr>';
+                        });
+                    }
                     tbody.innerHTML = html;
+                })
+                .catch(() => {});
+        }
+
+        function addServer() {
+            const hostname = document.getElementById('add-hostname').value.trim();
+            const backend = document.getElementById('add-backend').value.trim();
+            const serverId = document.getElementById('add-serverid').value.trim();
+            const errEl = document.getElementById('add-error');
+            errEl.style.display = 'none';
+
+            if (!hostname || !backend || !serverId) {
+                errEl.textContent = 'All fields are required.';
+                errEl.style.display = '';
+                return;
+            }
+
+            fetch('/api/servers', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ hostname: hostname, backend: backend, crafty_server_id: serverId })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.error) {
+                    errEl.textContent = data.error;
+                    errEl.style.display = '';
+                } else {
+                    document.getElementById('add-hostname').value = '';
+                    document.getElementById('add-backend').value = '';
+                    document.getElementById('add-serverid').value = '';
+                    updateServers();
+                }
+            })
+            .catch(() => {});
+        }
+
+        function removeServer(hostname) {
+            if (!confirm('Remove server "' + hostname + '"?')) return;
+            fetch('/api/servers?hostname=' + encodeURIComponent(hostname), { method: 'DELETE' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.error) alert(data.error);
+                    else updateServers();
                 })
                 .catch(() => {});
         }

@@ -69,7 +69,7 @@ func main() {
 	}
 
 	// Start dashboard in background.
-	go web.Start(state, cfg.WebPort)
+	go web.Start(state, cfg.WebPort, cfg.ServersPath, p.ReloadServers)
 
 	// Start backend health monitor.
 	p.StartMonitor()

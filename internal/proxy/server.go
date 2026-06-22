@@ -84,3 +84,62 @@ func equalFoldASCII(a, b string) bool {
 	}
 	return true
 }
+
+// AddServerToFile adds a server entry to servers.yml, creating the file if needed.
+func AddServerToFile(path string, entry ServerEntry) error {
+	sc, err := LoadServers(path)
+	if err != nil && !os.IsNotExist(err) {
+		// If the file exists but is invalid, check the underlying error.
+		if !os.IsNotExist(err) {
+			return err
+		}
+	}
+	if sc == nil {
+		sc = &ServersConfig{}
+	}
+
+	// Check for duplicate hostname.
+	for _, s := range sc.Servers {
+		if equalFoldASCII(s.Hostname, entry.Hostname) {
+			return fmt.Errorf("server %q already exists", entry.Hostname)
+		}
+	}
+
+	sc.Servers = append(sc.Servers, entry)
+	return writeServersFile(path, sc)
+}
+
+// RemoveServerFromFile removes a server entry by hostname from servers.yml.
+func RemoveServerFromFile(path, hostname string) error {
+	sc, err := LoadServers(path)
+	if err != nil {
+		return err
+	}
+	if sc == nil {
+		return fmt.Errorf("no servers configured")
+	}
+
+	found := false
+	var filtered []ServerEntry
+	for _, s := range sc.Servers {
+		if equalFoldASCII(s.Hostname, hostname) {
+			found = true
+			continue
+		}
+		filtered = append(filtered, s)
+	}
+	if !found {
+		return fmt.Errorf("server %q not found", hostname)
+	}
+
+	sc.Servers = filtered
+	return writeServersFile(path, sc)
+}
+
+func writeServersFile(path string, sc *ServersConfig) error {
+	data, err := yaml.Marshal(sc)
+	if err != nil {
+		return fmt.Errorf("marshal servers YAML: %w", err)
+	}
+	return os.WriteFile(path, data, 0644)
+}
