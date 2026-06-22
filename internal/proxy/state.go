@@ -102,6 +102,9 @@ type State struct {
 	// Server icon base64-encoded PNG (for MOTD).
 	iconBase64 string
 
+	// Node info for display.
+	craftyNode string
+
 	// Server config list (for dashboard / API).
 	serverEntries []ServerEntry
 }
@@ -346,6 +349,20 @@ func (s *State) Icon() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.iconBase64
+}
+
+// SetCraftyNode stores the Crafty node address for display.
+func (s *State) SetCraftyNode(addr string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.craftyNode = addr
+}
+
+// CraftyNode returns the Crafty node address.
+func (s *State) CraftyNode() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.craftyNode
 }
 
 // UpdatePlayers updates the player list from a Crafty or external source.

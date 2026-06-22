@@ -266,6 +266,7 @@ function updateDashboard() {
         document.getElementById('elapsed').textContent = String(Math.floor(e/60)).padStart(2,'0') + ':' + String(e%60).padStart(2,'0');
         document.getElementById('players').textContent = data.players + ' / ' + data.max_players;
         document.getElementById('info-backend').textContent = data.server_online ? 'Online' : 'Offline';
+        document.getElementById('node-info').textContent = data.crafty_node ? 'Crafty: ' + data.crafty_node : '';
     }).catch(function(){});
     api('/api/health').then(function(h) {
         var html = '';

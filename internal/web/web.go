@@ -94,6 +94,7 @@ func Start(state *proxy.State, addr, configPath, password string, reloadServers 
 			"phase": s.Phase, "phase_since": s.PhaseSince, "server_online": s.ServerOnline,
 			"players": s.Players, "max_players": s.MaxPlayers, "player_list": s.PlayerList,
 			"world_seed": s.WorldSeed, "world_name": s.WorldName,
+			"crafty_node": state.CraftyNode(),
 		})
 	})
 

@@ -27,6 +27,7 @@ func main() {
 
 	state := proxy.NewState(cfg.Lang)
 	state.Logf("PROXY: mc-wake-proxy starting (lang=%s)", cfg.Lang)
+	state.SetCraftyNode(cfg.CraftyHost + ":" + cfg.CraftyPort)
 
 	// Wire up dependencies.
 	wolSender := wol.UDPSender{}
