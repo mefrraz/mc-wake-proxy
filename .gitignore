@@ -1,0 +1,26 @@
+# Binaries
+mc-wake-proxy
+/mc-wake-proxy
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.*
+
+# Reasonix
+.reasonix/
+
+# Test coverage
+*.out
+coverage.html
