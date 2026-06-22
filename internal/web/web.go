@@ -106,6 +106,7 @@ func Start(state *proxy.State, addr, configPath, password string, reloadServers 
 		}
 		data, _ := dashboardHTML.ReadFile("templates/dashboard.html")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		w.Write(data)
 	}
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
