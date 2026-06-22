@@ -73,13 +73,51 @@ th, td { padding: 8px 6px; text-align: left; font-size: 13px; border-bottom: 1px
 th { color: var(--text-dim); font-weight: 500; font-size: 11px; text-transform: uppercase; }
 .server-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
 .server-card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 16px; cursor: pointer; transition: border-color .2s;
+    background: var(--surface); border: 2px solid var(--border);
+    border-radius: var(--radius); padding: 16px; cursor: pointer;
+    transition: border-color 0.5s, background-color 0.5s;
 }
 .server-card:hover { border-color: var(--accent); }
-.server-card .host { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
-.server-card .addr { font-family: var(--mono); font-size: 12px; color: var(--text-dim); margin-bottom: 10px; }
-.server-card .sactions { display: flex; gap: 6px; flex-wrap: wrap; }
+.server-card.online { border-color: var(--green); }
+.server-card.booting { border-color: var(--orange); }
+.server-card.stopping { border-color: var(--red); }
+.server-card .host { font-weight: 600; font-size: 14px; margin-bottom: 2px; display: flex; align-items: center; gap: 8px; }
+.server-card .state-badge {
+    display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 600;
+    transition: background-color 0.5s, color 0.5s;
+}
+.server-card .addr { font-family: var(--mono); font-size: 12px; color: var(--text-dim); margin-bottom: 6px; }
+.server-card .phase-info { font-size: 11px; margin-bottom: 6px; }
+.server-card .sactions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+
+.stats-strip {
+    display: flex; gap: 24px; padding: 12px 20px; margin-bottom: 16px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    font-size: 12px; color: var(--text-dim);
+}
+.stats-strip span { font-weight: 600; color: var(--text); }
+
+.timeline { display: flex; gap: 6px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+.timeline .step {
+    display: flex; align-items: center; gap: 4px; font-size: 11px; padding: 4px 10px;
+    border-radius: 14px; background: var(--bg); color: var(--text-dim); transition: all 0.5s;
+}
+.timeline .step.done { background: #1a3a24; color: var(--green); }
+.timeline .step.active { background: #3a2e1a; color: var(--orange); }
+.timeline .step.todo { background: var(--bg); color: #3a3d44; }
+.timeline .step .spinner {
+    display: inline-block; width: 10px; height: 10px; border: 2px solid var(--orange); border-top-color: transparent;
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 640px) {
+    nav { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    nav a { padding: 8px 12px; font-size: 13px; white-space: nowrap; }
+    .server-grid { grid-template-columns: 1fr; }
+    input, button, .btn { min-height: 44px; }
+    .stats-strip { flex-wrap: wrap; gap: 12px; }
+}
 .health-row { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; margin-bottom: 10px; }
 .health-row span { display: flex; align-items: center; gap: 4px; }
 .empty { text-align: center; color: var(--text-dim); padding: 24px 0; font-size: 13px; }
@@ -130,6 +168,9 @@ th { color: var(--text-dim); font-weight: 500; font-size: 11px; text-transform: 
             <h2>Connections</h2>
             <div class="health-row" id="health-dots"></div>
         </div>
+        <div class="stats-strip" id="stats-strip">
+            <span id="stats-text">Loading...</span>
+        </div>
         <div class="card">
             <h2>Servers</h2>
             <div class="server-grid" id="server-cards"></div>
@@ -152,6 +193,7 @@ th { color: var(--text-dim); font-weight: 500; font-size: 11px; text-transform: 
                 <span style="font-weight:600;" id="sd-title"></span>
                 <span></span>
             </div>
+            <div class="timeline" id="sd-timeline"></div>
             <div class="card" id="sd-icon-card" style="display:none;">
                 <img class="server-icon" id="sd-icon" alt="" src="">
                 <h2 id="sd-icon-name" style="margin-bottom:4px;"></h2>
@@ -373,7 +415,13 @@ function updateDashboard() {
         document.getElementById('node-info').textContent = data.crafty_node ? 'Crafty: ' + data.crafty_node : '';
         document.getElementById('nav-crafty').textContent = data.crafty_node ? data.crafty_node : '';
         document.getElementById('nav-crafty').href = data.crafty_node ? 'https://' + data.crafty_node : '#';
-        // Count servers.
+        // Stats strip.
+        api('/api/servers').then(function(servers) {
+            var online = 0, total = (servers||[]).length;
+            (servers||[]).forEach(function(s) { if (s.online) online++; });
+            document.getElementById('stats-text').innerHTML = total + ' servers &middot; ' + online + ' online &middot; Last activity ' + new Date().toLocaleTimeString();
+        }).catch(function(){});
+        // Server count.
         api('/api/servers').then(function(servers) {
             var online = 0;
             (servers||[]).forEach(function(s) { if (s.online) online++; });
@@ -394,19 +442,24 @@ function updateDashboard() {
         empty.style.display = 'none';
         var html = '';
         servers.forEach(function(s) {
-            var dot = '<span class="status-dot" style="background:' + (s.online ? 'var(--green)' : 'var(--red)') + ';"></span>';
+            var online = s.online;
+            var phase = s.phase || 'idle';
+            var cardClass = online ? 'online' : (phase === 'stopping' ? 'stopping' : (phase !== 'idle' && phase !== 'ready' ? 'booting' : ''));
+            var badgeLabel = online ? 'Online' : (phase === 'stopping' ? 'Stopping' : (phase !== 'idle' && phase !== 'ready' ? phase.replace(/_/g,' ') : 'Offline'));
+            var badgeColor = online ? 'var(--green)' : (phase === 'stopping' ? 'var(--red)' : (phase !== 'idle' && phase !== 'ready' ? 'var(--orange)' : 'var(--red)'));
             var elapsedStr = '';
-            if (!s.online && s.phase && s.phase !== 'idle' && s.phase !== 'ready') {
+            if (!online && phase !== 'idle' && phase !== 'ready') {
                 var since = new Date(s.phase_since);
                 var e = Math.floor((Date.now() - since.getTime()) / 1000);
-                elapsedStr = '<div style="font-size:11px;color:var(--orange);margin-top:4px;">' + s.phase.replace(/_/g,' ') + ' ' + Math.floor(e/60) + 'm ' + (e%60) + 's</div>';
+                var phaseLabel = {waking_host:'Acordando Proxmox...', waiting_lxc:'A iniciar LXC...', starting_mc:'A arrancar servidor...', stopping:'A desligar...'}[phase] || phase;
+                elapsedStr = '<div class="phase-info" style="color:var(--orange);">' + phaseLabel + ' · ' + Math.floor(e/60) + 'm ' + (e%60) + 's</div>';
             }
             var waitingStr = '';
-            if (!s.online && s.waiting_count > 0) {
-                waitingStr = '<div style="font-size:11px;color:var(--text-dim);margin-top:2px;">' + s.waiting_count + ' player(s) waiting</div>';
+            if (!online && s.waiting_count > 0) {
+                waitingStr = '<div class="phase-info" style="color:var(--text-dim);">' + s.waiting_count + ' jogador(es) à espera</div>';
             }
-            html += '<div class="server-card" data-hostname="' + esc(s.hostname) + '">';
-            html += '<div class="host">' + dot + esc(s.hostname) + '</div>';
+            html += '<div class="server-card ' + cardClass + '" data-hostname="' + esc(s.hostname) + '">';
+            html += '<div class="host">' + esc(s.hostname) + '<span class="state-badge" style="background:' + badgeColor + '22;color:' + badgeColor + ';">' + badgeLabel + '</span></div>';
             html += '<div class="addr">' + esc(s.backend) + '</div>';
             html += elapsedStr + waitingStr;
             html += '<div class="sactions">';
@@ -467,6 +520,7 @@ function showServerDetail(hostname) {
         var s = null;
         servers.forEach(function(x) { if (x.hostname === hostname) s = x; });
         if (!s) return;
+        buildTimeline(s.phase || 'idle');
         document.getElementById('sd-hostname').textContent = s.hostname;
         document.getElementById('sd-backend').textContent = s.backend;
         document.getElementById('sd-crafty').textContent = s.crafty_server_id || '-';
@@ -515,15 +569,34 @@ function showServerDetail(hostname) {
     }).catch(function(){});
 }
 
+function buildTimeline(phase) {
+    var steps = ['waking_host','waiting_lxc','starting_mc','ready'];
+    var labels = ['WOL','Proxmox','LXC','Crafty','Ready'];
+    var html = '';
+    var reached = false;
+    for (var i = 0; i < 5; i++) {
+        var key = steps[i] || 'ready';
+        var label = labels[i];
+        var cls = 'todo', icon = '·';
+        if (phase === 'ready') { cls = 'done'; icon = '✓'; }
+        else if (phase === 'stopping') { cls = 'done'; icon = '✓'; }
+        else if (phase === key) { cls = 'active'; icon = '<span class="spinner"></span>'; }
+        else if (!reached) { cls = 'done'; icon = '✓'; }
+        if (phase !== 'ready' && phase !== 'stopping' && i < steps.length && key === phase) reached = true;
+        html += '<div class="step ' + cls + '">' + icon + ' ' + label + '</div>';
+    }
+    document.getElementById('sd-timeline').innerHTML = html;
+}
+
 // ---- SETTINGS ----
 function serverAction(action, hostname) {
     var labels = { stop: 'Stop', restart: 'Restart', start: 'Start' };
     if (!confirm(labels[action] + ' server "' + hostname + '"?')) return;
     api('/api/action/' + action + '?hostname=' + encodeURIComponent(hostname), { method: 'POST' }).then(function(data) {
-        if (data.error) { alert(data.error); return; }
+        if (data.error) { toast(data.error, false); return; }
         if (currentTab === 'dash') updateDashboard();
         if (currentTab === 'servers' && currentServer) showServerDetail(currentServer);
-    }).catch(function(err) { alert('Request failed: ' + err); });
+    }).catch(function(err) { toast('Request failed: ' + err, false); });
 }
 
 function sendConsoleCmd() {
@@ -537,9 +610,10 @@ function sendConsoleCmd() {
         if (!confirm('Command "' + firstWord + '" can affect the server. Send it?')) return;
     }
     api('/api/console?hostname=' + encodeURIComponent(currentServer) + '&cmd=' + encodeURIComponent(cmd), { method: 'POST' }).then(function(data) {
-        if (data.error) { alert(data.error); return; }
+        if (data.error) { toast(data.error, false); return; }
         document.getElementById('sd-cmd').value = '';
-    }).catch(function(err) { alert('Failed: ' + err); });
+        toast('Command sent', true);
+    }).catch(function(err) { toast('Failed: ' + err, false); });
 }
 
 // ---- LOGS ----
@@ -555,8 +629,8 @@ function copyLogs() {
     try {
         if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text); }
         else { var ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.left = '-9999px'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); }
-        alert('Copied to clipboard');
-    } catch(e) { alert('Copy failed'); }
+        toast('Copied to clipboard', true);
+    } catch(e) { toast('Copy failed', false); }
 }
 
 // ---- SETTINGS ----
@@ -610,7 +684,7 @@ function addServer() {
 function removeServer(hostname) {
     if (!confirm('Remove server "' + hostname + '"?')) return;
     api('/api/servers?hostname=' + encodeURIComponent(hostname), { method: 'DELETE' }).then(function(d) {
-        if (d.error) { alert(d.error); return; }
+        if (d.error) { toast(d.error, false); return; }
         updateSettings(); updateDashboard();
     });
 }
@@ -646,7 +720,7 @@ function importDiscovered(id, name, ip, port) {
     if (!hostname) return;
     api('/api/servers', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({hostname:hostname, backend:ip+':'+port, crafty_server_id:id}) })
         .then(function(d) {
-            if (d.error) { alert(d.error); return; }
+            if (d.error) { toast(d.error, false); return; }
             document.getElementById('discover-list').innerHTML = '<span style="color:var(--green);">Server imported: ' + esc(hostname) + '</span>';
             updateSettings(); updateDashboard();
         });
@@ -675,12 +749,26 @@ function toast(msg, ok) {
 function updateNavStatus() {
     api('/api/servers').then(function(servers) {
         var online = 0, total = (servers||[]).length;
-        (servers||[]).forEach(function(s) { if (s.online) online++; });
+        var worstPhase = 'idle';
+        (servers||[]).forEach(function(s) {
+            if (s.online) online++;
+            var p = s.phase || 'idle';
+            if (p === 'stopping') worstPhase = 'stopping';
+            else if (p !== 'idle' && p !== 'ready' && worstPhase === 'idle') worstPhase = 'booting';
+            else if (p === 'ready' && worstPhase === 'idle') worstPhase = 'ready';
+        });
         var dot = document.getElementById('nav-dot');
         var el = document.getElementById('nav-status');
+        var phaseColors = {idle:'#8892a0', booting:'#f39c12', stopping:'#e74c3c', ready:'#2ecc71'};
+        dot.style.background = phaseColors[worstPhase] || phaseColors.idle;
+        dot.classList.toggle('pulse', worstPhase === 'booting');
         if (total === 0) { el.innerHTML = ''; return; }
-        el.innerHTML = online + '/' + total + ' online';
-        dot.classList.toggle('pulse', online < total);
+        if (total === 1 && worstPhase !== 'idle' && worstPhase !== 'ready') {
+            var labels = {booting:'A arrancar', stopping:'A desligar'};
+            el.innerHTML = labels[worstPhase] || '';
+        } else {
+            el.innerHTML = online + '/' + total + ' online';
+        }
     }).catch(function(){});
 }
 
