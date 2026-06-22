@@ -96,6 +96,12 @@ func (c *Client) RestartServer(serverID string) error {
 	return c.post(path, nil)
 }
 
+// SendCommand sends a raw command to the Minecraft server's stdin via Crafty.
+func (c *Client) SendCommand(serverID, command string) error {
+	path := fmt.Sprintf("/servers/%s/action/%s", serverID, command)
+	return c.post(path, nil)
+}
+
 // ListServers returns all servers visible via the status endpoint.
 func (c *Client) ListServers() ([]ServerInfo, error) {
 	var servers []ServerInfo

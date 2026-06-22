@@ -91,6 +91,7 @@ th { color: var(--text-dim); font-weight: 500; font-size: 11px; text-transform: 
 
 <nav>
     <div class="logo"><span class="dot" id="nav-dot"></span>mc-wake-proxy</div>
+    <span style="font-size:11px;color:var(--text-dim);margin-left:auto;margin-right:16px;" id="node-info"></span>
     <a data-tab="dash" class="active">Dashboard</a>
     <a data-tab="servers">Servers</a>
     <a data-tab="logs">Logs</a>
@@ -156,6 +157,13 @@ th { color: var(--text-dim); font-weight: 500; font-size: 11px; text-transform: 
                 <div style="display:flex;gap:8px;flex-wrap:wrap;" id="sd-actions"></div>
             </div>
             <div class="card">
+                <h2>Console</h2>
+                <div style="display:flex;gap:8px;">
+                    <input type="text" id="sd-cmd" placeholder="Command (e.g. say Hello)" style="flex:1;" onkeydown="if(event.key==='Enter')sendConsoleCmd()">
+                    <button class="btn btn-accent btn-sm" onclick="sendConsoleCmd()">Send</button>
+                </div>
+            </div>
+            <div class="card">
                 <h2>Server Logs</h2>
                 <div class="logs" id="sd-logs">Loading...</div>
             </div>
@@ -199,6 +207,11 @@ th { color: var(--text-dim); font-weight: 500; font-size: 11px; text-transform: 
             </table>
             <div class="empty" id="settings-no-servers" style="display:none;">No servers configured.</div>
         </div>
+        <div class="card">
+            <h2>DuckDNS Subdomains</h2>
+            <p style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">Suggested subdomains for your servers. All resolve to the same IP via DuckDNS wildcard.</p>
+            <div id="duckdns-suggestions" style="font-family:var(--mono);font-size:12px;color:var(--text);"></div>
+        </div>
     </div>
 </main>
 
@@ -208,6 +221,7 @@ var PHASES = {
     'waking_host': { label: 'Waking Host', color: '#f39c12', dot: '#f39c12' },
     'waiting_lxc': { label: 'Waiting LXC', color: '#f39c12', dot: '#f39c12' },
     'starting_mc': { label: 'Starting MC', color: '#f39c12', dot: '#f39c12' },
+    'stopping':    { label: 'Stopping',    color: '#e74c3c', dot: '#e74c3c' },
     'ready':       { label: 'Ready',       color: '#2ecc71', dot: '#2ecc71' },
 };
 var currentTab = 'dash';
@@ -388,6 +402,16 @@ function serverAction(action, hostname) {
     }).catch(function(err) { alert('Request failed: ' + err); });
 }
 
+function sendConsoleCmd() {
+    if (!currentServer) return;
+    var cmd = document.getElementById('sd-cmd').value.trim();
+    if (!cmd) return;
+    api('/api/console?hostname=' + encodeURIComponent(currentServer) + '&cmd=' + encodeURIComponent(cmd), { method: 'POST' }).then(function(data) {
+        if (data.error) { alert(data.error); return; }
+        document.getElementById('sd-cmd').value = '';
+    }).catch(function(err) { alert('Failed: ' + err); });
+}
+
 // ---- LOGS ----
 function fetchLogs() {
     api('/api/logs').then(function(logs) {
@@ -423,6 +447,19 @@ function updateSettings() {
         });
         tbody.innerHTML = html;
         tbody.querySelectorAll('.btn-remove').forEach(function(b) { b.addEventListener('click', function() { removeServer(this.dataset.hostname); }); });
+        // DuckDNS suggestions.
+        var suggestions = document.getElementById('duckdns-suggestions');
+        if (servers && servers.length > 0) {
+            var html = '';
+            servers.forEach(function(s) {
+                var sug = s.hostname.toLowerCase().replace(/[^a-z0-9.-]/g, '');
+                if (!sug.includes('.')) sug = sug + '.yourdomain.duckdns.org';
+                html += '<div style="padding:4px 0;">' + sug + '</div>';
+            });
+            suggestions.innerHTML = html || 'Add servers above to see suggestions.';
+        } else {
+            suggestions.innerHTML = 'Add servers above to see suggested subdomains.';
+        }
     });
 }
 

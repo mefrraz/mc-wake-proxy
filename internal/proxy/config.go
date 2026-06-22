@@ -50,6 +50,9 @@ type Config struct {
 
 	// Auto-shutdown idle servers after this many minutes of 0 players. 0 = disabled.
 	AutoShutdownMinutes int
+
+	// If set, dashboard requires password authentication.
+	ProxyPassword string
 }
 
 // LoadConfig reads configuration from environment variables.
@@ -78,6 +81,7 @@ func LoadConfig() (*Config, error) {
 		WOLBroadcast:       os.Getenv("WOL_BROADCAST"),
 		CoolDownMinutes:      getEnvInt("COOLDOWN_MINUTES", 5),
 		AutoShutdownMinutes:  getEnvInt("AUTO_SHUTDOWN_MINUTES", 0),
+		ProxyPassword:        os.Getenv("PROXY_PASSWORD"),
 	}
 
 	// Try loading multi-server config.

@@ -1,9 +1,10 @@
-// Package web serves the mc-wake-proxy dashboard and API endpoints.
 package web
 
 import (
+	"crypto/sha256"
 	"embed"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -13,215 +14,192 @@ import (
 //go:embed templates/dashboard.html
 var dashboardHTML embed.FS
 
-// Start launches the HTTP dashboard server with server management API.
-// reloadServers is called after adding/removing a server to update routing at runtime.
-// stopServer/restartServer are Crafty action callbacks.
-func Start(state *proxy.State, addr, configPath string, reloadServers func(string) error, stopServer, restartServer, startServer func(string) error, listServers func() ([]proxy.DiscoveredServer, error)) {
+// Start launches the HTTP dashboard server.
+func Start(state *proxy.State, addr, configPath, password string, reloadServers func(string) error, stopServer, restartServer, startServer func(string) error, sendCommand func(string, string) error, listServers func() ([]proxy.DiscoveredServer, error)) {
 	mux := http.NewServeMux()
 
-	// Dashboard page.
+	// Session token from password hash.
+	var sessionToken string
+	if password != "" {
+		h := sha256.Sum256([]byte(password + "mc-wake-proxy-salt"))
+		sessionToken = fmt.Sprintf("%x", h)
+	}
+
+	// Auth check helper.
+	checkAuth := func(w http.ResponseWriter, r *http.Request) bool {
+		if sessionToken == "" {
+			return true
+		}
+		cookie, err := r.Cookie("mc_session")
+		if err == nil && cookie.Value == sessionToken {
+			return true
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		return false
+	}
+
+	// Login handler.
+	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
+		if password == "" {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+		if r.Method == "POST" {
+			r.ParseForm()
+			if r.FormValue("password") == password {
+				http.SetCookie(w, &http.Cookie{Name: "mc_session", Value: sessionToken, Path: "/", MaxAge: 86400 * 30, HttpOnly: true})
+				http.Redirect(w, r, "/", http.StatusSeeOther)
+				return
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Write([]byte(`<html><body style="background:#0f1419;color:#e2e6ed;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;"><form method=post><h2>mc-wake-proxy</h2><input name=password type=password placeholder=Password autofocus style="padding:8px;border-radius:6px;border:1px solid #2a3140;background:#1a1f2b;color:#e2e6ed;font-size:14px;"><button style="margin-left:8px;padding:8px 16px;border-radius:6px;border:none;background:#4f8cff;color:#fff;font-weight:600;cursor:pointer;">Login</button><p style="color:#e74c3c;font-size:12px;">Wrong password</p></form></body></html>`))
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(`<html><body style="background:#0f1419;color:#e2e6ed;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;"><form method=post><h2>mc-wake-proxy</h2><input name=password type=password placeholder=Password autofocus style="padding:8px;border-radius:6px;border:1px solid #2a3140;background:#1a1f2b;color:#e2e6ed;font-size:14px;"><button style="margin-left:8px;padding:8px 16px;border-radius:6px;border:none;background:#4f8cff;color:#fff;font-weight:600;cursor:pointer;">Login</button></form></body></html>`))
+	})
+
+	// Root — redirect to login if needed.
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
 			return
+		}
+		if sessionToken != "" {
+			cookie, err := r.Cookie("mc_session")
+			if err != nil || cookie.Value != sessionToken {
+				http.Redirect(w, r, "/login", http.StatusSeeOther)
+				return
+			}
 		}
 		data, _ := dashboardHTML.ReadFile("templates/dashboard.html")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(data)
 	})
 
-	// API: current proxy status.
-	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+	// API handlers (all wrapped with auth).
+	api := func(path string, h http.HandlerFunc) {
+		mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+			if !checkAuth(w, r) { return }
+			h(w, r)
+		})
+	}
+
+	api("/api/status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		s := state.Status()
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"phase":         s.Phase,
-			"phase_since":   s.PhaseSince,
-			"server_online": s.ServerOnline,
-			"players":       s.Players,
-			"max_players":   s.MaxPlayers,
-			"player_list":   s.PlayerList,
-			"world_seed":    s.WorldSeed,
-			"world_name":    s.WorldName,
+			"phase": s.Phase, "phase_since": s.PhaseSince, "server_online": s.ServerOnline,
+			"players": s.Players, "max_players": s.MaxPlayers, "player_list": s.PlayerList,
+			"world_seed": s.WorldSeed, "world_name": s.WorldName,
 		})
 	})
 
-	// API: recent log lines (optionally filtered by ?hostname=X).
-	mux.HandleFunc("/api/logs", func(w http.ResponseWriter, r *http.Request) {
+	api("/api/logs", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		hostname := r.URL.Query().Get("hostname")
 		var logs []string
 		if hostname != "" {
 			logs = state.ServerLogs(hostname)
 			if logs == nil {
-				// Fallback: filter global logs by hostname mention.
 				for _, l := range state.Logs() {
-					if strings.Contains(l, hostname) {
-						logs = append(logs, l)
-					}
+					if strings.Contains(l, hostname) { logs = append(logs, l) }
 				}
 			}
-			if logs == nil {
-				logs = []string{}
-			}
+			if logs == nil { logs = []string{} }
 		} else {
 			logs = state.Logs()
 		}
 		json.NewEncoder(w).Encode(logs)
 	})
 
-	// API: health checks.
-	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
+	api("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(state.Health())
 	})
 
-	// API: configured servers with status + add/remove.
-	mux.HandleFunc("/api/servers", func(w http.ResponseWriter, r *http.Request) {
+	api("/api/servers", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method {
 		case "GET":
 			entries := state.ServerEntries()
 			statuses := state.ServerStatuses()
-			type serverInfo struct {
-				Hostname       string `json:"hostname"`
-				Backend        string `json:"backend"`
-				CraftyServerID string `json:"crafty_server_id"`
-				Online         bool   `json:"online"`
+			type si struct {
+				Hostname, Backend, CraftyServerID string
+				Online bool
 			}
-			servers := make([]serverInfo, 0, len(entries))
+			out := make([]si, 0, len(entries))
 			for _, e := range entries {
-				servers = append(servers, serverInfo{
-					Hostname:       e.Hostname,
-					Backend:        e.Backend,
-					CraftyServerID: e.CraftyServerID,
-					Online:         statuses[e.Hostname],
-				})
+				out = append(out, si{e.Hostname, e.Backend, e.CraftyServerID, statuses[e.Hostname]})
 			}
-			json.NewEncoder(w).Encode(servers)
-
+			json.NewEncoder(w).Encode(out)
 		case "POST":
-			var entry proxy.ServerEntry
-			if err := json.NewDecoder(r.Body).Decode(&entry); err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				json.NewEncoder(w).Encode(map[string]string{"error": "Invalid JSON: " + err.Error()})
-				return
-			}
-			if entry.Hostname == "" || entry.Backend == "" || entry.CraftyServerID == "" {
-				w.WriteHeader(http.StatusBadRequest)
-				json.NewEncoder(w).Encode(map[string]string{"error": "hostname, backend, and crafty_server_id are required"})
-				return
-			}
-			if err := proxy.AddServerToFile(configPath, entry); err != nil {
-				w.WriteHeader(http.StatusConflict)
-				json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-				return
-			}
-			if err := reloadServers(configPath); err != nil {
-				state.Logf("WEB: reload after add failed: %v", err)
-			}
-			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-
+			var e proxy.ServerEntry
+			if err := json.NewDecoder(r.Body).Decode(&e); err != nil { w.WriteHeader(400); return }
+			if e.Hostname == "" || e.Backend == "" || e.CraftyServerID == "" { w.WriteHeader(400); return }
+			if err := proxy.AddServerToFile(configPath, e); err != nil { w.WriteHeader(409); json.NewEncoder(w).Encode(map[string]string{"error":err.Error()}); return }
+			reloadServers(configPath)
+			w.WriteHeader(201); json.NewEncoder(w).Encode(map[string]string{"status":"ok"})
 		case "DELETE":
 			hostname := r.URL.Query().Get("hostname")
-			if hostname == "" {
-				w.WriteHeader(http.StatusBadRequest)
-				json.NewEncoder(w).Encode(map[string]string{"error": "?hostname= is required"})
-				return
-			}
-			if err := proxy.RemoveServerFromFile(configPath, hostname); err != nil {
-				w.WriteHeader(http.StatusNotFound)
-				json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-				return
-			}
-			if err := reloadServers(configPath); err != nil {
-				state.Logf("WEB: reload after remove failed: %v", err)
-			}
-			json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-
+			if hostname == "" { w.WriteHeader(400); return }
+			if err := proxy.RemoveServerFromFile(configPath, hostname); err != nil { w.WriteHeader(404); json.NewEncoder(w).Encode(map[string]string{"error":err.Error()}); return }
+			reloadServers(configPath)
+			json.NewEncoder(w).Encode(map[string]string{"status":"ok"})
 		default:
-			w.WriteHeader(http.StatusMethodNotAllowed)
+			w.WriteHeader(405)
 		}
 	})
 
-	// API: server actions (stop, restart).
-	mux.HandleFunc("/api/action/", func(w http.ResponseWriter, r *http.Request) {
+	api("/api/action/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		if r.Method != "POST" {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
+		if r.Method != "POST" { w.WriteHeader(405); return }
 		hostname := r.URL.Query().Get("hostname")
 		action := r.URL.Path[len("/api/action/"):]
-		if hostname == "" || action == "" {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]string{"error": "?hostname= is required"})
-			return
-		}
-
-		// Resolve Crafty server ID from config (case-insensitive).
+		if hostname == "" || action == "" { w.WriteHeader(400); return }
 		entries := state.ServerEntries()
 		var craftyID string
-		hLower := []byte(hostname)
-		for i := range hLower {
-			if hLower[i] >= 'A' && hLower[i] <= 'Z' {
-				hLower[i] += 32
-			}
-		}
 		for _, e := range entries {
-			b := []byte(e.Hostname)
-			for i := range b {
-				if b[i] >= 'A' && b[i] <= 'Z' {
-					b[i] += 32
-				}
-			}
-			if string(hLower) == string(b) {
-				craftyID = e.CraftyServerID
-				break
-			}
+			if strings.EqualFold(e.Hostname, hostname) { craftyID = e.CraftyServerID; break }
 		}
-		if craftyID == "" {
-			w.WriteHeader(http.StatusNotFound)
-			json.NewEncoder(w).Encode(map[string]string{"error": "server not found"})
-			return
-		}
-
+		if craftyID == "" { w.WriteHeader(404); return }
 		var err error
 		switch action {
-		case "start":
-			err = startServer(craftyID)
+		case "start": err = startServer(craftyID)
 		case "stop":
 			state.SetPhaseForServer(hostname, proxy.PhaseStopping)
 			state.Logf("WEB: stopping %s", hostname)
 			err = stopServer(craftyID)
-		case "restart":
-			err = restartServer(craftyID)
-		default:
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]string{"error": "unknown action"})
-			return
+		case "restart": err = restartServer(craftyID)
+		default: w.WriteHeader(400); return
 		}
-
-		if err != nil {
-			state.Logf("WEB: action %s on %s failed: %v", action, hostname, err)
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-			return
-		}
-		state.Logf("WEB: %s %s via Crafty", action, hostname)
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		if err != nil { w.WriteHeader(500); json.NewEncoder(w).Encode(map[string]string{"error":err.Error()}); return }
+		json.NewEncoder(w).Encode(map[string]string{"status":"ok"})
 	})
 
-	// API: discover servers from Crafty.
-	mux.HandleFunc("/api/crafty/servers", func(w http.ResponseWriter, r *http.Request) {
+	api("/api/console", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != "POST" { w.WriteHeader(405); return }
+		hostname := r.URL.Query().Get("hostname")
+		cmd := r.URL.Query().Get("cmd")
+		if hostname == "" || cmd == "" { w.WriteHeader(400); return }
+		entries := state.ServerEntries()
+		var craftyID string
+		for _, e := range entries {
+			if strings.EqualFold(e.Hostname, hostname) { craftyID = e.CraftyServerID; break }
+		}
+		if craftyID == "" { w.WriteHeader(404); return }
+		if err := sendCommand(craftyID, cmd); err != nil { w.WriteHeader(500); json.NewEncoder(w).Encode(map[string]string{"error":err.Error()}); return }
+		state.Logf("CONSOLE: %s > %s", hostname, cmd)
+		json.NewEncoder(w).Encode(map[string]string{"status":"ok"})
+	})
+
+	api("/api/crafty/servers", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		servers, err := listServers()
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-			return
-		}
+		if err != nil { w.WriteHeader(500); json.NewEncoder(w).Encode(map[string]string{"error":err.Error()}); return }
 		json.NewEncoder(w).Encode(servers)
 	})
 
