@@ -14,6 +14,9 @@ import (
 //go:embed templates/dashboard.html
 var dashboardHTML embed.FS
 
+//go:embed logo.png
+var logoPNG []byte
+
 // Start launches the HTTP dashboard server.
 func Start(state *proxy.State, addr, configPath, password string, reloadServers func(string) error, stopServer, restartServer, startServer func(string) error, sendCommand func(string, string) error, listServers func() ([]proxy.DiscoveredServer, error)) {
 	mux := http.NewServeMux()
@@ -211,7 +214,7 @@ func Start(state *proxy.State, addr, configPath, password string, reloadServers 
 	mux.HandleFunc("/logo.png", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/png")
 		w.Header().Set("Cache-Control", "public, max-age=86400")
-		http.ServeFile(w, r, "docs/logo.png")
+		w.Write(logoPNG)
 	})
 
 	state.Logf("WEB: dashboard listening on %s", addr)

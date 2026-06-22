@@ -92,14 +92,14 @@ th { color: var(--text-dim); font-weight: 500; font-size: 11px; text-transform: 
 
 <nav>
     <div class="logo"><span class="dot" id="nav-dot"></span>mc-wake-proxy</div>
-    <div style="display:flex;gap:4px;margin:0 auto;">
+    <div style="display:flex;gap:4px;flex:1;justify-content:center;">
         <a data-tab="dash" class="active">Dashboard</a>
         <a data-tab="servers">Servers</a>
         <a data-tab="logs">Logs</a>
         <a data-tab="settings">Settings</a>
         <a data-tab="docs">Docs</a>
     </div>
-    <a id="nav-crafty" style="font-size:11px;color:var(--text-dim);text-decoration:none;" target="_blank"></a>
+    <a id="nav-crafty" style="font-size:11px;color:var(--text-dim);text-decoration:none;white-space:nowrap;" target="_blank"></a>
 </nav>
 
 <main>
@@ -112,7 +112,7 @@ th { color: var(--text-dim); font-weight: 500; font-size: 11px; text-transform: 
             </div>
             <div class="row"><span class="label">Phase</span><span class="value" id="phase-text">-</span></div>
             <div class="row"><span class="label">Elapsed</span><span class="value" id="elapsed">-</span></div>
-            <div class="row"><span class="label">Listener</span><span class="value">:25565</span></div>
+            <div class="row"><span class="label">Servers</span><span class="value" id="server-count">-</span></div>
         </div>
         <div class="card">
             <h2>Connections</h2>
@@ -220,21 +220,37 @@ th { color: var(--text-dim); font-weight: 500; font-size: 11px; text-transform: 
     <!-- DOCS -->
     <div class="tab" id="tab-docs">
         <div class="card">
-            <h2>DuckDNS — How to create subdomains</h2>
-            <p style="font-size:12px;color:var(--text-dim);margin-bottom:14px;">Each Minecraft server needs its own hostname. DuckDNS supports wildcards — all subdomains of your base domain resolve to the same IP. The proxy routes by hostname.</p>
-            <div style="display:grid;gap:10px;grid-template-columns:1fr 1fr;margin-bottom:14px;">
+            <h2>DuckDNS — Dynamic DNS for Minecraft</h2>
+            <p style="font-size:13px;color:var(--text-dim);margin-bottom:8px;">DuckDNS is a <b>free</b> dynamic DNS service. It gives you a permanent domain name (like <code style="color:var(--accent);">mefrraz.duckdns.org</code>) that always points to your home IP — even when your ISP changes it.</p>
+            <h3 style="margin-top:14px;">Setup</h3>
+            <ol style="font-size:12px;color:var(--text-dim);padding-left:18px;line-height:1.8;">
+                <li>Register at <a href="https://duckdns.org" target="_blank" style="color:var(--accent);">duckdns.org</a> (sign in with GitHub/Google)</li>
+                <li>Create a subdomain (e.g. <code style="color:var(--accent);">minecraftamigos</code>)</li>
+                <li>Install the update script on your Pi so DuckDNS always knows your IP (see <a href="https://github.com/mefrraz/mc-wake-proxy/blob/master/docs/duckdns.md" target="_blank" style="color:var(--accent);">full guide</a>)</li>
+                <li>Forward <b>TCP port 25565</b> on your router to the Pi's local IP</li>
+                <li>That's it — all subdomains (<code style="color:var(--accent);">*.minecraftamigos.duckdns.org</code>) resolve to your network automatically</li>
+            </ol>
+            <h3 style="margin-top:14px;">Multi-Server</h3>
+            <p style="font-size:12px;color:var(--text-dim);margin-bottom:8px;">Use different hostnames for different Minecraft servers — the proxy routes by hostname. Example:</p>
+            <table style="font-size:12px;margin-bottom:10px;">
+                <tr><td style="padding:3px 8px;color:var(--accent);">minecraftamigos.duckdns.org</td><td style="padding:3px 8px;color:var(--text-dim);">→ Main server (port 25565)</td></tr>
+                <tr><td style="padding:3px 8px;color:var(--accent);">survival.minecraftamigos.duckdns.org</td><td style="padding:3px 8px;color:var(--text-dim);">→ Survival server (port 25566)</td></tr>
+                <tr><td style="padding:3px 8px;color:var(--accent);">creative.minecraftamigos.duckdns.org</td><td style="padding:3px 8px;color:var(--text-dim);">→ Creative server (port 25567)</td></tr>
+            </table>
+            <h3 style="margin-top:14px;">Subdomain Generator</h3>
+            <div style="display:flex;gap:10px;align-items:flex-end;">
                 <div>
-                    <label style="font-size:11px;color:var(--text-dim);display:block;margin-bottom:4px;">Your base DuckDNS domain</label>
-                    <input type="text" id="duck-base" placeholder="minecraftamigos.duckdns.org" style="width:100%;">
+                    <label style="font-size:11px;color:var(--text-dim);display:block;margin-bottom:4px;">Base domain</label>
+                    <input type="text" id="duck-base" placeholder="minecraftamigos.duckdns.org" style="width:220px;">
                 </div>
                 <div>
                     <label style="font-size:11px;color:var(--text-dim);display:block;margin-bottom:4px;">Server name</label>
-                    <input type="text" id="duck-server" placeholder="survival" style="width:100%;">
+                    <input type="text" id="duck-server" placeholder="survival" style="width:150px;">
                 </div>
+                <button class="btn btn-accent btn-sm" onclick="generateSubdomain()">Generate</button>
             </div>
-            <button class="btn btn-accent btn-sm" onclick="generateSubdomain()">Generate</button>
-            <div id="duck-result" style="margin-top:12px;font-family:var(--mono);font-size:14px;color:var(--green);font-weight:600;"></div>
-            <p style="font-size:11px;color:var(--text-dim);margin-top:8px;">Use this hostname when importing a server on the <b>Settings</b> page.</p>
+            <div id="duck-result" style="margin-top:8px;font-family:var(--mono);font-size:14px;color:var(--green);font-weight:600;"></div>
+            <p style="font-size:11px;color:var(--text-dim);margin-top:6px;">Paste this hostname when importing a server on the <b>Settings</b> page.</p>
         </div>
         <div class="card">
             <h2>Proxmox Setup</h2>
@@ -325,6 +341,12 @@ function updateDashboard() {
         document.getElementById('node-info').textContent = data.crafty_node ? 'Crafty: ' + data.crafty_node : '';
         document.getElementById('nav-crafty').textContent = data.crafty_node ? data.crafty_node : '';
         document.getElementById('nav-crafty').href = data.crafty_node ? 'https://' + data.crafty_node : '#';
+        // Count servers.
+        api('/api/servers').then(function(servers) {
+            var online = 0;
+            (servers||[]).forEach(function(s) { if (s.online) online++; });
+            document.getElementById('server-count').textContent = (servers||[]).length + ' configured, ' + online + ' online';
+        }).catch(function(){});
     }).catch(function(){});
     api('/api/health').then(function(h) {
         var html = '';
