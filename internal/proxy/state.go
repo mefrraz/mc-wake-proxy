@@ -158,8 +158,14 @@ func (s *State) CanStartWake() bool {
 func (s *State) IsOnline(hostname string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if ss, ok := s.servers[hostname]; ok {
-		return ss.online
+	if hostname != "" {
+		if ss, ok := s.servers[hostname]; ok {
+			return ss.online
+		}
+		// In multi-server mode, unknown hostname is not online.
+		if len(s.servers) > 0 {
+			return false
+		}
 	}
 	return s.serverOnline
 }
