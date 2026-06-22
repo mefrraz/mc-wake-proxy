@@ -1,0 +1,35 @@
+services:
+  mc-wake-proxy:
+    build: .
+    container_name: mc-wake-proxy
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      # ---- Required: Wake-on-LAN ----
+      - WOL_MAC=<REPLACE_ME>           # MAC address of Proxmox host (e.g. c4:34:6b:60:40:9b)
+      - WOL_BROADCAST=<REPLACE_ME>     # IPv4 broadcast address (e.g. 192.168.1.255)
+
+      # ---- Required: Minecraft backend ----
+      - BACKEND_TARGET=<REPLACE_ME>    # IP:port of Minecraft server inside LXC (e.g. 192.168.1.131:25565)
+
+      # ---- Required: Proxmox VE API ----
+      - PROXMOX_HOST=<REPLACE_ME>      # Proxmox hostname or IP (e.g. 192.168.1.10)
+      # PROXMOX_PORT=8006              # Optional, default 8006
+      - PROXMOX_NODE=<REPLACE_ME>      # Proxmox node name (e.g. pve)
+      - PROXMOX_LXC_ID=<REPLACE_ME>    # LXC container ID (e.g. 100)
+      - PROXMOX_TOKEN_ID=<REPLACE_ME>  # API token ID (user@realm!tokenname)
+      - PROXMOX_TOKEN_SECRET=<REPLACE_ME> # API token secret UUID
+      # PROXMOX_INSECURE_SKIP_VERIFY=true  # Optional, default true (self-signed cert)
+
+      # ---- Required: Crafty Controller API ----
+      - CRAFTY_HOST=<REPLACE_ME>       # Crafty hostname or IP (e.g. 192.168.1.131)
+      # CRAFTY_PORT=8443               # Optional, default 8443
+      - CRAFTY_TOKEN=<REPLACE_ME>      # Crafty API token (Bearer auth)
+      - CRAFTY_SERVER_ID=<REPLACE_ME>  # Crafty server UUID to manage
+      # CRAFTY_INSECURE_SKIP_VERIFY=true # Optional, default true
+
+      # ---- Optional: tuning ----
+      - MC_LISTEN_PORT=25565           # Minecraft proxy listen port
+      - WEB_PORT=8080                  # Dashboard HTTP port
+      - LANG=en                        # Locale: en, pt
+      - COOLDOWN_MINUTES=5             # Max time to wait for wake sequence (minutes)
