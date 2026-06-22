@@ -55,6 +55,27 @@ func Start(state *proxy.State, addr string) {
 		json.NewEncoder(w).Encode(state.Health())
 	})
 
+	// API: configured servers with status.
+	mux.HandleFunc("/api/servers", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		entries := state.ServerEntries()
+		statuses := state.ServerStatuses()
+		type serverInfo struct {
+			Hostname string `json:"hostname"`
+			Backend  string `json:"backend"`
+			Online   bool   `json:"online"`
+		}
+		servers := make([]serverInfo, 0, len(entries))
+		for _, e := range entries {
+			servers = append(servers, serverInfo{
+				Hostname: e.Hostname,
+				Backend:  e.Backend,
+				Online:   statuses[e.Hostname],
+			})
+		}
+		json.NewEncoder(w).Encode(servers)
+	})
+
 	state.Logf("WEB: dashboard listening on %s", addr)
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		state.Logf("WEB: server error: %v", err)

@@ -10,7 +10,7 @@ func TestNewStateDefaults(t *testing.T) {
 	if s.Phase() != PhaseIdle {
 		t.Fatalf("expected PhaseIdle, got %s", s.Phase())
 	}
-	if s.IsOnline() {
+	if s.IsOnline("") {
 		t.Fatal("expected server offline")
 	}
 	if s.IsBooting() {
@@ -49,22 +49,22 @@ func TestPhaseTransitions(t *testing.T) {
 		t.Fatal("expected PhaseStartingMC")
 	}
 
-	s.SetOnline()
+	s.SetOnline("")
 	if s.Phase() != PhaseReady {
 		t.Fatal("expected PhaseReady after SetOnline")
 	}
-	if !s.IsOnline() {
+	if !s.IsOnline("") {
 		t.Fatal("expected online after SetOnline")
 	}
 	if s.IsBooting() {
 		t.Fatal("expected not booting in PhaseReady")
 	}
 
-	s.SetOffline()
+	s.SetOffline("")
 	if s.Phase() != PhaseIdle {
 		t.Fatal("expected PhaseIdle after SetOffline")
 	}
-	if s.IsOnline() {
+	if s.IsOnline("") {
 		t.Fatal("expected offline after SetOffline")
 	}
 }

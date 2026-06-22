@@ -1,0 +1,19 @@
+# mc-wake-proxy multi-server configuration
+# If this file exists, single-server env vars (BACKEND_TARGET, CRAFTY_SERVER_ID) are ignored.
+# Delete or rename this file to return to single-server mode.
+#
+# Each server needs:
+#   hostname        — The exact hostname players type in Minecraft (case-insensitive)
+#   backend         — IP:port of the Minecraft server inside the LXC
+#   crafty_server_id — The Crafty Controller server UUID
+#
+# Example (uncomment and fill in):
+#
+# servers:
+#   - hostname: survival.minecraft.example.com
+#     backend: 192.168.1.131:25566
+#     crafty_server_id: abc12345-6789-4def-9012-3456789abcde
+#
+#   - hostname: creative.minecraft.example.com
+#     backend: 192.168.1.131:25567
+#     crafty_server_id: def67890-abcd-4ef0-1234-567890abcdef

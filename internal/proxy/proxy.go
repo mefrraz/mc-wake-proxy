@@ -62,21 +62,45 @@ func (p *Proxy) StartMonitor() {
 	go func() {
 		for {
 			time.Sleep(5 * time.Second)
-			if !p.state.IsOnline() {
+			if !p.state.IsOnline("") && !p.state.HasAnyOnline() {
 				continue
 			}
-			conn, err := net.DialTimeout("tcp", p.cfg.BackendTarget, 2*time.Second)
-			if err != nil {
-				p.state.SetOffline()
-				p.state.Logf("MONITOR: backend %s went offline — state reset to idle", p.cfg.BackendTarget)
+			// Check global backend in single-server mode, or all backends in multi mode.
+			if p.cfg.Servers != nil {
+				for _, srv := range p.cfg.Servers.Servers {
+					if p.state.IsOnline(srv.Hostname) {
+						conn, err := net.DialTimeout("tcp", srv.Backend, 2*time.Second)
+						if err != nil {
+							p.state.SetOffline(srv.Hostname)
+							p.state.Logf("MONITOR: %s (%s) went offline", srv.Hostname, srv.Backend)
+						} else {
+							conn.Close()
+						}
+					}
+				}
 			} else {
-				conn.Close()
+				conn, err := net.DialTimeout("tcp", p.cfg.BackendTarget, 2*time.Second)
+				if err != nil {
+					p.state.SetOfflineGlobally()
+					p.state.Logf("MONITOR: backend %s went offline", p.cfg.BackendTarget)
+				} else {
+					conn.Close()
+				}
 			}
 		}
 	}()
 }
 
-// handleConnection processes one Minecraft client connection.
+// resolveServer returns the backend and crafty_server_id for a hostname.
+// In multi-server mode, looks up the server entry. Falls back to global config.
+func (p *Proxy) resolveServer(hostname string) (backend, craftyServerID string) {
+	if p.cfg.Servers != nil {
+		if entry := p.cfg.Servers.Lookup(hostname); entry != nil {
+			return entry.Backend, entry.CraftyServerID
+		}
+	}
+	return p.cfg.BackendTarget, p.cfg.CraftyServerID
+}
 func (p *Proxy) handleConnection(client net.Conn) {
 	defer client.Close()
 
@@ -153,14 +177,17 @@ func (p *Proxy) handleLogin(client net.Conn, hs *mcproto.Handshake, hsRaw, lsRaw
 		}
 	}
 
-	// If backend is already online, proxy transparently.
-	if p.state.IsOnline() {
-		p.state.Logf("MC: %s joining — backend online, proxying", player)
-		p.proxyToBackend(client, hsRaw, lsRaw)
+	hostname := hs.ServerAddress
+	backend, craftyID := p.resolveServer(hostname)
+
+	// If this specific backend is already online, proxy transparently.
+	if p.state.IsOnline(hostname) {
+		p.state.Logf("MC: %s joining %s — backend online, proxying", player, hostname)
+		p.proxyToBackend(client, hsRaw, lsRaw, backend)
 		return
 	}
 
-	// If already booting, just kick.
+	// If already booting, kick.
 	if p.state.IsBooting() {
 		p.kickClient(client, p.state.LangPack().KickBooting)
 		return
@@ -172,17 +199,15 @@ func (p *Proxy) handleLogin(client net.Conn, hs *mcproto.Handshake, hsRaw, lsRaw
 	}
 
 	p.state.SetPhase(PhaseWakingHost)
-	p.state.Logf("WAKE: %s triggered wake sequence", player)
+	p.state.Logf("WAKE: %s triggered wake for %s", player, hostname)
 
-	go p.wakeSequence()
+	go p.wakeSequence(hostname, backend, craftyID)
 
 	p.kickClient(client, p.state.LangPack().KickOffline)
 }
 
-// wakeSequence runs the full Proxmox → LXC → Crafty → Minecraft chain.
-// It checks before acting at each phase — if the host is already awake, the LXC
-// already running, or the Minecraft server already started, that step is skipped.
-func (p *Proxy) wakeSequence() {
+// wakeSequence runs the Proxmox → LXC → Crafty → Minecraft chain for a specific server.
+func (p *Proxy) wakeSequence(hostname, backend, craftyServerID string) {
 	cooldown := time.Duration(p.cfg.CoolDownMinutes) * time.Minute
 	deadline := time.Now().Add(cooldown)
 
@@ -237,19 +262,19 @@ func (p *Proxy) wakeSequence() {
 	}
 	if !lxcRunning {
 		p.state.Logf("PROXMOX: LXC did not start — giving up")
-		p.state.SetOffline()
+		p.state.SetOffline(hostname)
 		return
 	}
 
 	// Phase 3: Ensure Minecraft server is running via Crafty.
 	p.state.SetPhase(PhaseStartingMC)
-	info, err := p.crafty.GetServerStatus(p.cfg.CraftyServerID)
+	info, err := p.crafty.GetServerStatus(craftyServerID)
 	if err == nil && info.Running {
-		p.state.Logf("CRAFTY: server already running — skipping start")
+		p.state.Logf("CRAFTY: server %s already running — skipping start", craftyServerID[:8])
 	} else {
-		p.state.Logf("CRAFTY: starting server %s", p.cfg.CraftyServerID)
-		time.Sleep(3 * time.Second) // let Crafty be reachable if LXC just booted
-		if err := p.crafty.StartServer(p.cfg.CraftyServerID); err != nil {
+		p.state.Logf("CRAFTY: starting server %s", craftyServerID[:8])
+		time.Sleep(3 * time.Second)
+		if err := p.crafty.StartServer(craftyServerID); err != nil {
 			p.state.Logf("CRAFTY: start error: %v", err)
 		} else {
 			p.state.Logf("CRAFTY: start_server command sent")
@@ -258,14 +283,14 @@ func (p *Proxy) wakeSequence() {
 
 	// Poll until Minecraft backend is reachable.
 	for time.Now().Before(deadline) {
-		info, err := p.crafty.GetServerStatus(p.cfg.CraftyServerID)
+		info, err := p.crafty.GetServerStatus(craftyServerID)
 		if err == nil && info.Running {
-			conn, err := net.DialTimeout("tcp", p.cfg.BackendTarget, 2*time.Second)
+			conn, err := net.DialTimeout("tcp", backend, 2*time.Second)
 			if err == nil {
 				conn.Close()
 				p.state.UpdatePlayers(info.Online, nil)
-				p.state.SetOnline()
-				p.state.Logf("MC: backend %s ready (%d players)", p.cfg.BackendTarget, info.Online)
+				p.state.SetOnline(hostname)
+				p.state.Logf("MC: backend %s ready (%d players)", backend, info.Online)
 				return
 			}
 			p.state.Logf("MC: Crafty says running but TCP failed — retrying...")
@@ -276,42 +301,40 @@ func (p *Proxy) wakeSequence() {
 	}
 
 	p.state.Logf("MC: backend not reachable — giving up")
-	p.state.SetOffline()
+	p.state.SetOffline(hostname)
 }
 
 // proxyToBackend replays captured handshake + login bytes, then transparently forwards.
-func (p *Proxy) proxyToBackend(client net.Conn, hsRaw, lsRaw []byte) {
-	backend, err := net.Dial("tcp", p.cfg.BackendTarget)
+func (p *Proxy) proxyToBackend(client net.Conn, hsRaw, lsRaw []byte, backend string) {
+	backendConn, err := net.Dial("tcp", backend)
 	if err != nil {
-		p.state.Logf("PROXY: backend %s unreachable: %v", p.cfg.BackendTarget, err)
-		// Backend went down since last check — reset and retry via wake.
-		p.state.SetOffline()
+		p.state.Logf("PROXY: backend %s unreachable: %v", backend, err)
+		p.state.SetOffline("")
 		if p.state.CanStartWake() {
 			p.state.SetPhase(PhaseWakingHost)
-			go p.wakeSequence()
+			go p.wakeSequence("", backend, p.cfg.CraftyServerID)
 		}
 		p.kickClient(client, p.state.LangPack().KickOffline)
 		return
 	}
-	defer backend.Close()
+	defer backendConn.Close()
 
-	// Replay captured packets so the backend sees the handshake + login.
-	if _, err := backend.Write(hsRaw); err != nil {
+	if _, err := backendConn.Write(hsRaw); err != nil {
 		p.state.Logf("PROXY: replay handshake failed: %v", err)
 		p.kickClient(client, "§cConnection error — please try again.")
 		return
 	}
-	if _, err := backend.Write(lsRaw); err != nil {
+	if _, err := backendConn.Write(lsRaw); err != nil {
 		p.state.Logf("PROXY: replay login start failed: %v", err)
 		p.kickClient(client, "§cConnection error — please try again.")
 		return
 	}
 
-	p.state.Logf("PROXY: forwarding %s ↔ backend %s", client.RemoteAddr(), p.cfg.BackendTarget)
+	p.state.Logf("PROXY: forwarding %s ↔ backend %s", client.RemoteAddr(), backend)
 
 	done := make(chan struct{}, 2)
-	go func() { _, _ = io.Copy(backend, client); done <- struct{}{} }()
-	go func() { _, _ = io.Copy(client, backend); done <- struct{}{} }()
+	go func() { _, _ = io.Copy(backendConn, client); done <- struct{}{} }()
+	go func() { _, _ = io.Copy(client, backendConn); done <- struct{}{} }()
 	<-done
 }
 

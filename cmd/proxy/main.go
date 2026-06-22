@@ -53,9 +53,19 @@ func main() {
 	// If backend is already reachable, start in Ready state.
 	for _, hc := range result.Checks {
 		if hc.Name == "Backend" && hc.OK {
-			state.SetOnline()
+			state.SetOnline("")
 			state.Logf("PROXY: backend already reachable — starting in Ready state")
 		}
+	}
+
+	// Store server list for dashboard.
+	if cfg.Servers != nil {
+		state.SetServerEntries(cfg.Servers.Servers)
+		if cfg.Servers != nil {
+			state.Logf("PROXY: multi-server mode with %d server(s)", len(cfg.Servers.Servers))
+		}
+	} else {
+		state.Logf("PROXY: single-server mode (%s)", cfg.BackendTarget)
 	}
 
 	// Start dashboard in background.

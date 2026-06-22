@@ -57,13 +57,24 @@ var locales = map[string]LangPack{
 	},
 }
 
+// serverState tracks the runtime status of a single Minecraft backend.
+type serverState struct {
+	online bool
+	phase  Phase
+	phaseSince time.Time
+	players    int
+	playerList []string
+}
+
 // State is the global proxy state, safe for concurrent use.
 type State struct {
 	mu sync.RWMutex
 
+	// Shared wake phases (Proxmox, LXC).
 	phase      Phase
 	phaseSince time.Time
 
+	// Global defaults (used in single-server mode or as fallback).
 	serverOnline bool
 	players      int
 	maxPlayers   int
@@ -71,11 +82,17 @@ type State struct {
 	worldSeed    string
 	worldName    string
 
+	// Per-server state keyed by hostname (multi-server mode).
+	servers map[string]*serverState
+
 	logs      []string
 	logMaxLen int
 
 	lang   string
 	health HealthResult
+
+	// Server config list (for dashboard / API).
+	serverEntries []ServerEntry
 }
 
 // NewState returns an initialized State with the given locale.
@@ -87,6 +104,7 @@ func NewState(lang string) *State {
 		worldName:  "world",
 		worldSeed:  "N/A",
 		playerList: []string{},
+		servers:    make(map[string]*serverState),
 		logMaxLen:  200,
 		lang:       lang,
 	}
@@ -131,10 +149,14 @@ func (s *State) CanStartWake() bool {
 	return s.phase == PhaseIdle && !s.serverOnline
 }
 
-// IsOnline returns true if the Minecraft backend is reachable and ready.
-func (s *State) IsOnline() bool {
+// IsOnline returns true if a specific backend is online.
+// hostname is the server's hostname (empty = global default).
+func (s *State) IsOnline(hostname string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	if ss, ok := s.servers[hostname]; ok {
+		return ss.online
+	}
 	return s.serverOnline
 }
 
@@ -147,17 +169,51 @@ func (s *State) IsBooting() bool {
 
 // --- Server status ---
 
-// SetOnline marks the backend as online and transitions to PhaseReady.
-func (s *State) SetOnline() {
+// SetOnline marks a backend as online.
+func (s *State) SetOnline(hostname string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.serverOnline = true
 	s.phase = PhaseReady
 	s.phaseSince = time.Now()
+	if ss := s.ensureServer(hostname); ss != nil {
+		ss.online = true
+		ss.phase = PhaseReady
+		ss.phaseSince = time.Now()
+	}
 }
 
-// SetOffline marks the backend as offline and resets to PhaseIdle.
-func (s *State) SetOffline() {
+// SetOffline marks a backend as offline.
+func (s *State) SetOffline(hostname string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// Only update global if this was the server keeping it online.
+	if ss, ok := s.servers[hostname]; ok {
+		ss.online = false
+		ss.players = 0
+		ss.playerList = nil
+		ss.phase = PhaseIdle
+		ss.phaseSince = time.Now()
+	}
+	// Check if any server is still online before resetting global.
+	anyOnline := false
+	for _, ss := range s.servers {
+		if ss.online {
+			anyOnline = true
+			break
+		}
+	}
+	if !anyOnline {
+		s.serverOnline = false
+		s.players = 0
+		s.playerList = []string{}
+		s.phase = PhaseIdle
+		s.phaseSince = time.Now()
+	}
+}
+
+// SetOfflineGlobally resets all state (used by monitor).
+func (s *State) SetOfflineGlobally() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.serverOnline = false
@@ -165,6 +221,64 @@ func (s *State) SetOffline() {
 	s.playerList = []string{}
 	s.phase = PhaseIdle
 	s.phaseSince = time.Now()
+	for _, ss := range s.servers {
+		ss.online = false
+		ss.phase = PhaseIdle
+		ss.phaseSince = time.Now()
+	}
+}
+
+// ensureServer returns the serverState for hostname, creating it if needed.
+// Must be called with mu held (write lock).
+func (s *State) ensureServer(hostname string) *serverState {
+	if hostname == "" {
+		return nil
+	}
+	ss, ok := s.servers[hostname]
+	if !ok {
+		ss = &serverState{phase: PhaseIdle, phaseSince: time.Now()}
+		s.servers[hostname] = ss
+	}
+	return ss
+}
+
+// HasAnyOnline returns true if at least one server is marked online.
+func (s *State) HasAnyOnline() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, ss := range s.servers {
+		if ss.online {
+			return true
+		}
+	}
+	return s.serverOnline
+}
+
+// ServerStatuses returns a map of hostname → online status for the dashboard.
+func (s *State) ServerStatuses() map[string]bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make(map[string]bool)
+	for host, ss := range s.servers {
+		out[host] = ss.online
+	}
+	return out
+}
+
+// SetServerEntries stores the configured server list.
+func (s *State) SetServerEntries(entries []ServerEntry) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.serverEntries = entries
+}
+
+// ServerEntries returns the configured server list.
+func (s *State) ServerEntries() []ServerEntry {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]ServerEntry, len(s.serverEntries))
+	copy(out, s.serverEntries)
+	return out
 }
 
 // UpdatePlayers updates the player list from a Crafty or external source.
