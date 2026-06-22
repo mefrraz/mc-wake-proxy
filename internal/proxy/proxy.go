@@ -65,8 +65,12 @@ func (p *Proxy) handleConnection(client net.Conn) {
 		return
 	}
 
-	// 2. Parse handshake from the raw body (skip the leading length VarInt byte(s)).
-	hs, err := mcproto.ParseHandshake(hsRaw[1:])
+	// 2. Strip the length prefix properly, then parse.
+	hsBody, err := mcproto.StripPacketPrefix(hsRaw)
+	if err != nil {
+		return
+	}
+	hs, err := mcproto.ParseHandshake(hsBody)
 	if err != nil {
 		return
 	}
@@ -119,7 +123,14 @@ func (p *Proxy) handleStatus(client net.Conn, hs *mcproto.Handshake) {
 
 // handleLogin handles a player attempting to join.
 func (p *Proxy) handleLogin(client net.Conn, hs *mcproto.Handshake, hsRaw, lsRaw []byte, lsErr error) {
-	player := extractPlayerName(lsRaw)
+	player := "unknown"
+	if lsErr == nil {
+		if lsBody, err := mcproto.StripPacketPrefix(lsRaw); err == nil {
+			if name, err := mcproto.ParseLoginStart(lsBody); err == nil {
+				player = name
+			}
+		}
+	}
 
 	// If backend is already online, proxy transparently.
 	if p.state.IsOnline() {
@@ -161,9 +172,15 @@ func (p *Proxy) wakeSequence() {
 		p.state.Logf("WOL: magic packet sent")
 	}
 
+	firstFail := true
 	for time.Now().Before(deadline) {
-		if _, err := p.proxmox.GetLXCStatus(p.cfg.ProxmoxNode, p.cfg.ProxmoxLXCID); err == nil {
+		_, err := p.proxmox.GetLXCStatus(p.cfg.ProxmoxNode, p.cfg.ProxmoxLXCID)
+		if err == nil {
 			break
+		}
+		if firstFail {
+			p.state.Logf("PROXMOX: error: %v", err)
+			firstFail = false
 		}
 		p.state.Logf("PROXMOX: waiting for host to wake...")
 		time.Sleep(5 * time.Second)
@@ -265,28 +282,6 @@ func (p *Proxy) proxyToBackend(client net.Conn, hsRaw, lsRaw []byte) {
 func (p *Proxy) kickClient(client net.Conn, message string) {
 	jsonKick := fmt.Sprintf(`{"text":"%s"}`, escapeJSON(message))
 	_, _ = client.Write(mcproto.LoginDisconnect(jsonKick))
-}
-
-// extractPlayerName extracts the player name from raw Login Start bytes.
-func extractPlayerName(lsRaw []byte) string {
-	if len(lsRaw) < 3 {
-		return "unknown"
-	}
-	body := lsRaw[1:] // skip first length VarInt byte
-	for i := 0; i < len(body) && i < 5; i++ {
-		if body[i]&0x80 == 0 {
-			if i+2 >= len(body) {
-				return "unknown"
-			}
-			rest := body[i+2:] // skip packet ID byte
-			name, err := mcproto.ReadStringFromBytes(rest)
-			if err != nil || name == "" {
-				return "unknown"
-			}
-			return name
-		}
-	}
-	return "unknown"
 }
 
 // escapeJSON escapes double quotes and backslashes for JSON strings.

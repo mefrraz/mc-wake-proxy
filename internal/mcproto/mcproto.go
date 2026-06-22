@@ -97,6 +97,39 @@ func ReadPacketRaw(r io.Reader) ([]byte, error) {
 	return full, nil
 }
 
+// StripPacketPrefix removes the length VarInt prefix from a raw packet and
+// returns the body bytes.  This handles VarInts of any length (1-3 bytes).
+func StripPacketPrefix(raw []byte) ([]byte, error) {
+	r := bytes.NewReader(raw)
+	_, err := ReadVarInt(r) // consume the length VarInt
+	if err != nil {
+		return nil, fmt.Errorf("mcproto: strip prefix: %w", err)
+	}
+	// The remaining bytes are the body.
+	offset := len(raw) - r.Len()
+	return raw[offset:], nil
+}
+
+// ParseLoginStart extracts the player name from a raw Login Start packet body
+// (without the length prefix).  Body format: packet ID (0x00) + name (String).
+func ParseLoginStart(body []byte) (string, error) {
+	r := bytes.NewReader(body)
+
+	pktID, err := ReadVarInt(r)
+	if err != nil {
+		return "", fmt.Errorf("mcproto: login start packet ID: %w", err)
+	}
+	if pktID != 0x00 {
+		return "", fmt.Errorf("mcproto: expected login start 0x00, got 0x%02x", pktID)
+	}
+
+	name, err := ReadString(r)
+	if err != nil {
+		return "", fmt.Errorf("mcproto: login start name: %w", err)
+	}
+	return name, nil
+}
+
 // Handshake holds the parsed fields of a Minecraft Handshake packet (0x00).
 type Handshake struct {
 	ProtocolVersion int

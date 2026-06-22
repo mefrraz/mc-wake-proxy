@@ -225,3 +225,47 @@ func TestReadStringFromBytes(t *testing.T) {
 		t.Fatalf("expected 'hello proxy', got %q", s)
 	}
 }
+
+func TestStripPacketPrefix(t *testing.T) {
+	// Build a handshake packet with a 1-byte length prefix.
+	var body []byte
+	body = append(body, WriteVarInt(758)...)
+	body = append(body, WriteString("test.example.com")...)
+	body = append(body, 0x63, 0xDD)
+	body = append(body, WriteVarInt(2)...)
+	pkt := MakePacket(0x00, body)
+
+	stripped, err := StripPacketPrefix(pkt)
+	if err != nil {
+		t.Fatalf("StripPacketPrefix: %v", err)
+	}
+	if len(stripped) != len(body)+1 { // body + packet ID byte
+		t.Fatalf("expected %d bytes, got %d", len(body)+1, len(stripped))
+	}
+}
+
+func TestParseLoginStart(t *testing.T) {
+	// Build a Login Start body: packet ID 0x00 + "Steve"
+	var body []byte
+	body = append(body, WriteVarInt(0x00)...) // packet ID
+	body = append(body, WriteString("Steve")...)
+
+	name, err := ParseLoginStart(body)
+	if err != nil {
+		t.Fatalf("ParseLoginStart: %v", err)
+	}
+	if name != "Steve" {
+		t.Fatalf("expected 'Steve', got %q", name)
+	}
+}
+
+func TestParseLoginStartBadPacketID(t *testing.T) {
+	var body []byte
+	body = append(body, WriteVarInt(0x01)...) // wrong packet ID
+	body = append(body, WriteString("Steve")...)
+
+	_, err := ParseLoginStart(body)
+	if err == nil {
+		t.Fatal("expected error for bad packet ID")
+	}
+}

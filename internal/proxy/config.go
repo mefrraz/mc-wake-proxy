@@ -51,7 +51,7 @@ func LoadConfig() (*Config, error) {
 	cfg := &Config{
 		MCPort:            getEnv("MC_LISTEN_PORT", "25565"),
 		WebPort:           getEnv("WEB_PORT", "8080"),
-		Lang:              getEnv("LANG", "en"),
+		Lang:              getEnv("PROXY_LANG", "en"),
 		BackendTarget:     os.Getenv("BACKEND_TARGET"),
 		ProxmoxHost:       os.Getenv("PROXMOX_HOST"),
 		ProxmoxPort:       getEnv("PROXMOX_PORT", "8006"),
