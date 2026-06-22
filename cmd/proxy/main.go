@@ -50,6 +50,14 @@ func main() {
 	// Store health result in state so /api/health can serve it.
 	state.SetHealth(result)
 
+	// If backend is already reachable, start in Ready state.
+	for _, hc := range result.Checks {
+		if hc.Name == "Backend" && hc.OK {
+			state.SetOnline()
+			state.Logf("PROXY: backend already reachable — starting in Ready state")
+		}
+	}
+
 	// Start dashboard in background.
 	go web.Start(state, cfg.WebPort)
 
