@@ -55,6 +55,27 @@ func (p *Proxy) Start() error {
 	}
 }
 
+// StartMonitor runs a background loop that checks backend reachability.
+// If the backend goes down while the proxy thinks it's online, the state is
+// updated so the next player triggers a wake sequence.
+func (p *Proxy) StartMonitor() {
+	go func() {
+		for {
+			time.Sleep(5 * time.Second)
+			if !p.state.IsOnline() {
+				continue
+			}
+			conn, err := net.DialTimeout("tcp", p.cfg.BackendTarget, 2*time.Second)
+			if err != nil {
+				p.state.SetOffline()
+				p.state.Logf("MONITOR: backend %s went offline — state reset to idle", p.cfg.BackendTarget)
+			} else {
+				conn.Close()
+			}
+		}
+	}()
+}
+
 // handleConnection processes one Minecraft client connection.
 func (p *Proxy) handleConnection(client net.Conn) {
 	defer client.Close()
@@ -263,7 +284,13 @@ func (p *Proxy) proxyToBackend(client net.Conn, hsRaw, lsRaw []byte) {
 	backend, err := net.Dial("tcp", p.cfg.BackendTarget)
 	if err != nil {
 		p.state.Logf("PROXY: backend %s unreachable: %v", p.cfg.BackendTarget, err)
-		p.kickClient(client, "§cBackend unreachable — please try again.")
+		// Backend went down since last check — reset and retry via wake.
+		p.state.SetOffline()
+		if p.state.CanStartWake() {
+			p.state.SetPhase(PhaseWakingHost)
+			go p.wakeSequence()
+		}
+		p.kickClient(client, p.state.LangPack().KickOffline)
 		return
 	}
 	defer backend.Close()
@@ -271,10 +298,12 @@ func (p *Proxy) proxyToBackend(client net.Conn, hsRaw, lsRaw []byte) {
 	// Replay captured packets so the backend sees the handshake + login.
 	if _, err := backend.Write(hsRaw); err != nil {
 		p.state.Logf("PROXY: replay handshake failed: %v", err)
+		p.kickClient(client, "§cConnection error — please try again.")
 		return
 	}
 	if _, err := backend.Write(lsRaw); err != nil {
 		p.state.Logf("PROXY: replay login start failed: %v", err)
+		p.kickClient(client, "§cConnection error — please try again.")
 		return
 	}
 

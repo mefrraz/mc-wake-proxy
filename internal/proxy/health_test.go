@@ -31,20 +31,13 @@ func TestHealthCheckAllOK(t *testing.T) {
 	cm := &mockCM{info: &crafty.ServerInfo{Running: true, Online: 2}}
 
 	result := RunHealthChecks(cfg, pm, cm)
-	if !result.AllOK {
-		t.Fatal("expected AllOK=true")
-	}
+	// Backend check does real TCP dial — may fail in test environment.
+	// At minimum, Proxmox + Crafty + WOL must be OK.
 	if len(result.Checks) != 4 {
 		t.Fatalf("expected 4 checks, got %d", len(result.Checks))
 	}
-	for _, c := range result.Checks {
-		if c.Name == "Backend" {
-			// Backend check does real TCP dial — may fail, that's ok
-			continue
-		}
-		if !c.OK {
-			t.Errorf("check %s failed: %s", c.Name, c.Message)
-		}
+	if !result.Checks[0].OK || !result.Checks[1].OK || !result.Checks[2].OK {
+		t.Fatalf("expected Proxmox+Crafty+WOL OK, got: %+v", result.Checks)
 	}
 }
 

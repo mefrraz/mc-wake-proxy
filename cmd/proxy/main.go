@@ -61,6 +61,9 @@ func main() {
 	// Start dashboard in background.
 	go web.Start(state, cfg.WebPort)
 
+	// Start backend health monitor.
+	p.StartMonitor()
+
 	// Run the proxy (blocks).
 	state.Logf("PROXY: starting Minecraft listener on %s", cfg.MCPort)
 	if err := p.Start(); err != nil {
