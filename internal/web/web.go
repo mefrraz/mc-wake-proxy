@@ -128,8 +128,10 @@ func Start(state *proxy.State, addr, configPath, password string, reloadServers 
 			entries := state.ServerEntries()
 			statuses := state.ServerStatuses()
 			type si struct {
-				Hostname, Backend, CraftyServerID string
-				Online bool
+				Hostname       string `json:"hostname"`
+				Backend        string `json:"backend"`
+				CraftyServerID string `json:"crafty_server_id"`
+				Online         bool   `json:"online"`
 			}
 			out := make([]si, 0, len(entries))
 			for _, e := range entries {
