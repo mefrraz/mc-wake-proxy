@@ -251,11 +251,31 @@
 
         function copyLogs() {
             const text = document.getElementById('logs').textContent;
-            navigator.clipboard.writeText(text).then(function() {
-                const btn = event.target;
-                btn.textContent = '✅ Copied!';
+            const btn = event.target;
+            try {
+                // Try modern API first.
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(text).then(function() {
+                        btn.textContent = '✅ Copied!';
+                        setTimeout(function() { btn.textContent = '📋 Copy'; }, 1500);
+                    });
+                } else {
+                    // Fallback for HTTP (no clipboard API).
+                    var ta = document.createElement('textarea');
+                    ta.value = text;
+                    ta.style.position = 'fixed';
+                    ta.style.left = '-9999px';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(ta);
+                    btn.textContent = '✅ Copied!';
+                    setTimeout(function() { btn.textContent = '📋 Copy'; }, 1500);
+                }
+            } catch(e) {
+                btn.textContent = '❌ Failed';
                 setTimeout(function() { btn.textContent = '📋 Copy'; }, 1500);
-            });
+            }
         }
 
         function updateServers() {

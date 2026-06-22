@@ -100,6 +100,17 @@ func (p *Proxy) ReloadServers(path string) error {
 	p.cfg.Servers = sc
 	if sc != nil {
 		p.state.SetServerEntries(sc.Servers)
+		// Check which backends are already reachable.
+		for _, srv := range sc.Servers {
+			conn, err := net.DialTimeout("tcp", srv.Backend, 2*time.Second)
+			if err == nil {
+				conn.Close()
+				p.state.SetOnline(srv.Hostname)
+				p.state.Logf("PROXY: %s is online (%s)", srv.Hostname, srv.Backend)
+			} else {
+				p.state.Logf("PROXY: %s is offline (%s: %v)", srv.Hostname, srv.Backend, err)
+			}
+		}
 		p.state.Logf("PROXY: reloaded %d server(s) from %s", len(sc.Servers), path)
 	} else {
 		p.state.SetServerEntries(nil)
