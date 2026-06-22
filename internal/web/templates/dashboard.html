@@ -92,11 +92,13 @@ th { color: var(--text-dim); font-weight: 500; font-size: 11px; text-transform: 
 
 <nav>
     <div class="logo"><span class="dot" id="nav-dot"></span>mc-wake-proxy</div>
-    <span style="font-size:11px;color:var(--text-dim);margin-left:auto;margin-right:16px;" id="node-info"></span>
-    <a data-tab="dash" class="active">Dashboard</a>
-    <a data-tab="servers">Servers</a>
-    <a data-tab="logs">Logs</a>
-    <a data-tab="settings">Settings</a>
+    <div style="display:flex;gap:4px;margin:0 auto;">
+        <a data-tab="dash" class="active">Dashboard</a>
+        <a data-tab="servers">Servers</a>
+        <a data-tab="logs">Logs</a>
+        <a data-tab="settings">Settings</a>
+    </div>
+    <a id="nav-crafty" style="font-size:11px;color:var(--text-dim);text-decoration:none;" target="_blank"></a>
 </nav>
 
 <main>
@@ -104,13 +106,12 @@ th { color: var(--text-dim); font-weight: 500; font-size: 11px; text-transform: 
     <div class="tab active" id="tab-dash">
         <div class="card">
             <div style="display:flex;justify-content:space-between;align-items:center;">
-                <h2 style="margin:0;">Status</h2>
+                <h2 style="margin:0;">Proxy Status</h2>
                 <span class="badge" id="phase-badge"></span>
             </div>
             <div class="row"><span class="label">Phase</span><span class="value" id="phase-text">-</span></div>
             <div class="row"><span class="label">Elapsed</span><span class="value" id="elapsed">-</span></div>
-            <div class="row"><span class="label">Players Online</span><span class="value" id="players">-</span></div>
-            <div class="row"><span class="label">Backend</span><span class="value" id="info-backend">-</span></div>
+            <div class="row"><span class="label">Listener</span><span class="value">:25565</span></div>
         </div>
         <div class="card">
             <h2>Connections</h2>
@@ -265,9 +266,9 @@ function updateDashboard() {
         var s = new Date(data.phase_since);
         var e = Math.floor((Date.now() - s.getTime()) / 1000);
         document.getElementById('elapsed').textContent = String(Math.floor(e/60)).padStart(2,'0') + ':' + String(e%60).padStart(2,'0');
-        document.getElementById('players').textContent = data.players + ' / ' + data.max_players;
-        document.getElementById('info-backend').textContent = data.server_online ? 'Online' : 'Offline';
         document.getElementById('node-info').textContent = data.crafty_node ? 'Crafty: ' + data.crafty_node : '';
+        document.getElementById('nav-crafty').textContent = data.crafty_node ? data.crafty_node : '';
+        document.getElementById('nav-crafty').href = data.crafty_node ? 'https://' + data.crafty_node : '#';
     }).catch(function(){});
     api('/api/health').then(function(h) {
         var html = '';

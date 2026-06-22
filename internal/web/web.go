@@ -194,6 +194,7 @@ func Start(state *proxy.State, addr, configPath, password string, reloadServers 
 			if strings.EqualFold(e.Hostname, hostname) { craftyID = e.CraftyServerID; break }
 		}
 		if craftyID == "" { w.WriteHeader(404); return }
+		cmd = strings.TrimPrefix(cmd, "/")
 		if err := sendCommand(craftyID, cmd); err != nil { w.WriteHeader(500); json.NewEncoder(w).Encode(map[string]string{"error":err.Error()}); return }
 		state.Logf("CONSOLE: %s > %s", hostname, cmd)
 		json.NewEncoder(w).Encode(map[string]string{"status":"ok"})
