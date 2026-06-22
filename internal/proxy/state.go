@@ -150,19 +150,43 @@ func (s *State) PhaseElapsed() time.Duration {
 func (s *State) CanStartWake(hostname string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if s.phase != PhaseIdle {
-		return false
-	}
 	if hostname != "" {
 		if ss, ok := s.servers[hostname]; ok {
-			return !ss.online
+			return !ss.online && ss.phase == PhaseIdle
 		}
-		// Multi-server with unknown hostname: can start wake.
+		// Multi-server mode with unknown hostname: allow wake.
 		if len(s.servers) > 0 {
 			return true
 		}
 	}
-	return !s.serverOnline
+	// Single-server mode: check global phase.
+	return s.phase == PhaseIdle && !s.serverOnline
+}
+
+// SetPhaseForServer sets the wake phase for a specific server.
+func (s *State) SetPhaseForServer(hostname string, p Phase) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ss := s.ensureServer(hostname)
+	if ss != nil {
+		ss.phase = p
+		ss.phaseSince = time.Now()
+	}
+	// Also update global phase for backward compat.
+	s.phase = p
+	s.phaseSince = time.Now()
+}
+
+// PhaseForServer returns the current phase for a server.
+func (s *State) PhaseForServer(hostname string) Phase {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if hostname != "" {
+		if ss, ok := s.servers[hostname]; ok {
+			return ss.phase
+		}
+	}
+	return s.phase
 }
 
 // IsOnline returns true if a specific backend is online.

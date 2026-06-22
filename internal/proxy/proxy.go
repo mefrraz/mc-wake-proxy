@@ -246,7 +246,7 @@ func (p *Proxy) handleStatus(client net.Conn, hs *mcproto.Handshake) {
 	var motd string
 	if p.state.IsOnline(hostname) {
 		motd = lp.MotdReady
-	} else if p.state.IsBooting() {
+	} else if p.state.PhaseForServer(hostname) != PhaseIdle && p.state.PhaseForServer(hostname) != PhaseReady {
 		motd = lp.MotdBooting
 	} else {
 		motd = lp.MotdOffline
@@ -298,19 +298,19 @@ func (p *Proxy) handleLogin(client net.Conn, hs *mcproto.Handshake, hsRaw, lsRaw
 		return
 	}
 
-	// If already booting, kick.
-	if p.state.IsBooting() {
+	// If already booting for this server, kick.
+	if p.state.PhaseForServer(hostname) != PhaseIdle && p.state.PhaseForServer(hostname) != PhaseReady {
 		p.kickClient(client, p.state.LangPack().KickBooting)
 		return
 	}
 
 	if !p.state.CanStartWake(hostname) {
-		p.state.Logf("MC: wake blocked for %s (phase=%s)", hostname, p.state.Phase())
+		p.state.Logf("MC: wake blocked for %s (phase=%s)", hostname, p.state.PhaseForServer(hostname))
 		p.kickClient(client, p.state.LangPack().KickOffline)
 		return
 	}
 
-	p.state.SetPhase(PhaseWakingHost)
+	p.state.SetPhaseForServer(hostname, PhaseWakingHost)
 	p.state.Logf("WAKE: %s triggered wake for %s", player, hostname)
 
 	go p.wakeSequence(hostname, backend, craftyID)
@@ -324,7 +324,7 @@ func (p *Proxy) wakeSequence(hostname, backend, craftyServerID string) {
 	deadline := time.Now().Add(cooldown)
 
 	// Phase 1: Ensure Proxmox host is reachable.
-	p.state.SetPhase(PhaseWakingHost)
+	p.state.SetPhaseForServer(hostname, PhaseWakingHost)
 	_, err := p.proxmox.GetLXCStatus(p.cfg.ProxmoxNode, p.cfg.ProxmoxLXCID)
 	if err == nil {
 		p.state.Logf("PROXMOX: host already reachable — skipping WOL")
@@ -352,7 +352,7 @@ func (p *Proxy) wakeSequence(hostname, backend, craftyServerID string) {
 	}
 
 	// Phase 2: Ensure LXC is running.
-	p.state.SetPhase(PhaseWaitingLXC)
+	p.state.SetPhaseForServer(hostname, PhaseWaitingLXC)
 	lxcRunning := false
 	for time.Now().Before(deadline) {
 		status, err := p.proxmox.GetLXCStatus(p.cfg.ProxmoxNode, p.cfg.ProxmoxLXCID)
@@ -379,7 +379,7 @@ func (p *Proxy) wakeSequence(hostname, backend, craftyServerID string) {
 	}
 
 	// Phase 3: Ensure Minecraft server is running via Crafty.
-	p.state.SetPhase(PhaseStartingMC)
+	p.state.SetPhaseForServer(hostname, PhaseStartingMC)
 	info, err := p.crafty.GetServerStatus(craftyServerID)
 	if err == nil && info.Running {
 		p.state.Logf("CRAFTY: server %s already running — skipping start", craftyServerID[:8])
@@ -423,7 +423,7 @@ func (p *Proxy) proxyToBackend(client net.Conn, hsRaw, lsRaw []byte, backend str
 		p.state.Logf("PROXY: backend %s unreachable: %v", backend, err)
 		p.state.SetOffline("")
 		if p.state.CanStartWake("") {
-			p.state.SetPhase(PhaseWakingHost)
+			p.state.SetPhaseForServer("", PhaseWakingHost)
 			go p.wakeSequence("", backend, p.cfg.CraftyServerID)
 		}
 		p.kickClient(client, p.state.LangPack().KickOffline)
