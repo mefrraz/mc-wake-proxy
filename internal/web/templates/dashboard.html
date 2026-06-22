@@ -135,6 +135,23 @@ th { color: var(--text-dim); font-weight: 500; font-size: 11px; text-transform: 
 @keyframes toastIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
 .pulse { animation: pulse 1.2s ease-in-out infinite; }
+.hero {
+    padding: 28px 24px; border-radius: var(--radius); margin-bottom: 16px;
+    border: 2px solid var(--border); transition: border-color 0.5s, background-color 0.5s;
+}
+.hero-online { border-color: var(--green); background: #162618; }
+.hero-booting { border-color: var(--orange); background: #2e2410; }
+.hero-offline { border-color: var(--red); background: #2e1616; }
+.hero-stopping { border-color: var(--orange); background: #2e2410; }
+.hero-status { font-size: 20px; font-weight: 700; margin-bottom: 4px; color: var(--text); }
+.hero-sub { font-size: 13px; color: var(--text-dim); }
+.health-strip {
+    display: flex; gap: 16px; padding: 10px 16px; margin-bottom: 16px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-size: 12px; flex-wrap: wrap;
+}
+.health-strip span { display: flex; align-items: center; gap: 4px; }
+.empty-state { text-align: center; padding: 40px 20px; }
 </style>
 </head>
 <body>
@@ -155,26 +172,23 @@ th { color: var(--text-dim); font-weight: 500; font-size: 11px; text-transform: 
 <main>
     <!-- DASHBOARD -->
     <div class="tab active" id="tab-dash">
-        <div class="card">
-            <div style="display:flex;justify-content:space-between;align-items:center;">
-                <h2 style="margin:0;">Proxy Status</h2>
-                <span class="badge" id="phase-badge"></span>
-            </div>
-            <div class="row"><span class="label">Phase</span><span class="value" id="phase-text">-</span></div>
-            <div class="row"><span class="label">Elapsed</span><span class="value" id="elapsed">-</span></div>
-            <div class="row"><span class="label">Servers</span><span class="value" id="server-count">-</span></div>
+        <!-- Hero -->
+        <div class="hero" id="hero">
+            <div class="hero-status" id="hero-status">Loading...</div>
+            <div class="hero-sub" id="hero-sub"></div>
         </div>
-        <div class="card">
-            <h2>Connections</h2>
-            <div class="health-row" id="health-dots"></div>
-        </div>
-        <div class="stats-strip" id="stats-strip">
-            <span id="stats-text">Loading...</span>
-        </div>
-        <div class="card">
-            <h2>Servers</h2>
-            <div class="server-grid" id="server-cards"></div>
-            <div class="empty" id="no-servers" style="display:none;">No servers configured. Go to Settings to add one.</div>
+        <!-- Timeline (only when booting) -->
+        <div class="timeline" id="dash-timeline" style="display:none;"></div>
+        <!-- Health strip -->
+        <div class="health-strip" id="dash-health">Loading...</div>
+        <!-- Server cards (when 2+) -->
+        <div class="server-grid" id="server-cards"></div>
+        <!-- Empty state -->
+        <div class="empty-state" id="empty-state" style="display:none;">
+            <div style="font-size:48px;margin-bottom:12px;">🎮</div>
+            <div style="font-size:16px;font-weight:600;margin-bottom:4px;">No servers yet</div>
+            <div style="font-size:13px;color:var(--text-dim);margin-bottom:16px;">Add your first server in Settings to get started.</div>
+            <a href="/settings" class="btn btn-accent">Go to Settings</a>
         </div>
     </div>
 
@@ -403,80 +417,103 @@ function switchTab(id) {
 
 // ---- DASHBOARD ----
 function updateDashboard() {
-    api('/api/status').then(function(data) {
-        var p = PHASES[data.phase] || PHASES['idle'];
-        document.getElementById('nav-dot').style.background = p.dot;
-        var bdg = document.getElementById('phase-badge');
-        bdg.textContent = p.label; bdg.style.background = p.color + '22'; bdg.style.color = p.color;
-        document.getElementById('phase-text').textContent = p.label;
-        var s = new Date(data.phase_since);
-        var e = Math.floor((Date.now() - s.getTime()) / 1000);
-        document.getElementById('elapsed').textContent = String(Math.floor(e/60)).padStart(2,'0') + ':' + String(e%60).padStart(2,'0');
-        document.getElementById('node-info').textContent = data.crafty_node ? 'Crafty: ' + data.crafty_node : '';
-        document.getElementById('nav-crafty').textContent = data.crafty_node ? data.crafty_node : '';
-        document.getElementById('nav-crafty').href = data.crafty_node ? 'https://' + data.crafty_node : '#';
-        // Stats strip.
-        api('/api/servers').then(function(servers) {
-            var online = 0, total = (servers||[]).length;
-            (servers||[]).forEach(function(s) { if (s.online) online++; });
-            document.getElementById('stats-text').innerHTML = total + ' servers &middot; ' + online + ' online &middot; Last activity ' + new Date().toLocaleTimeString();
-        }).catch(function(){});
-        // Server count.
-        api('/api/servers').then(function(servers) {
-            var online = 0;
-            (servers||[]).forEach(function(s) { if (s.online) online++; });
-            document.getElementById('server-count').textContent = (servers||[]).length + ' configured, ' + online + ' online';
-        }).catch(function(){});
-    }).catch(function(){});
-    api('/api/health').then(function(h) {
-        var html = '';
-        (h.checks || []).forEach(function(c) {
-            html += '<span style="color:' + (c.ok ? 'var(--green)' : 'var(--red)') + '">' + (c.ok ? 'OK' : 'ERR') + ' ' + c.name + '</span>';
-        });
-        document.getElementById('health-dots').innerHTML = html;
-    }).catch(function(){});
     api('/api/servers').then(function(servers) {
-        var grid = document.getElementById('server-cards');
-        var empty = document.getElementById('no-servers');
-        if (!servers || servers.length === 0) { grid.innerHTML = ''; empty.style.display = ''; return; }
-        empty.style.display = 'none';
-        var html = '';
-        servers.forEach(function(s) {
-            var online = s.online;
-            var phase = s.phase || 'idle';
-            var cardClass = online ? 'online' : (phase === 'stopping' ? 'stopping' : (phase !== 'idle' && phase !== 'ready' ? 'booting' : ''));
-            var badgeLabel = online ? 'Online' : (phase === 'stopping' ? 'Stopping' : (phase !== 'idle' && phase !== 'ready' ? phase.replace(/_/g,' ') : 'Offline'));
-            var badgeColor = online ? 'var(--green)' : (phase === 'stopping' ? 'var(--red)' : (phase !== 'idle' && phase !== 'ready' ? 'var(--orange)' : 'var(--red)'));
-            var elapsedStr = '';
-            if (!online && phase !== 'idle' && phase !== 'ready') {
-                var since = new Date(s.phase_since);
-                var e = Math.floor((Date.now() - since.getTime()) / 1000);
-                var phaseLabel = {waking_host:'Acordando Proxmox...', waiting_lxc:'A iniciar LXC...', starting_mc:'A arrancar servidor...', stopping:'A desligar...'}[phase] || phase;
-                elapsedStr = '<div class="phase-info" style="color:var(--orange);">' + phaseLabel + ' · ' + Math.floor(e/60) + 'm ' + (e%60) + 's</div>';
-            }
-            var waitingStr = '';
-            if (!online && s.waiting_count > 0) {
-                waitingStr = '<div class="phase-info" style="color:var(--text-dim);">' + s.waiting_count + ' jogador(es) à espera</div>';
-            }
-            html += '<div class="server-card ' + cardClass + '" data-hostname="' + esc(s.hostname) + '">';
-            html += '<div class="host">' + esc(s.hostname) + '<span class="state-badge" style="background:' + badgeColor + '22;color:' + badgeColor + ';">' + badgeLabel + '</span></div>';
-            html += '<div class="addr">' + esc(s.backend) + '</div>';
-            html += elapsedStr + waitingStr;
-            html += '<div class="sactions">';
-            if (s.online) {
-                html += '<button class="btn btn-red btn-sm action-stop" data-hostname="' + esc(s.hostname) + '">Stop</button>';
-                html += '<button class="btn btn-orange btn-sm action-restart" data-hostname="' + esc(s.hostname) + '">Restart</button>';
-            } else {
-                html += '<button class="btn btn-green btn-sm action-start" data-hostname="' + esc(s.hostname) + '">Start</button>';
-            }
-            html += '</div></div>';
+        var total = (servers||[]).length;
+        var onlineList = [], offlineList = [], bootingList = [];
+        (servers||[]).forEach(function(s) {
+            if (s.online) onlineList.push(s);
+            else if (s.phase === 'stopping' || (s.phase !== 'idle' && s.phase !== 'ready')) bootingList.push(s);
+            else offlineList.push(s);
         });
-        grid.innerHTML = html;
-        // Attach event handlers to buttons inside cards.
-        grid.querySelectorAll('.action-stop').forEach(function(b) { b.addEventListener('click', function(e) { e.stopPropagation(); serverAction('stop', this.dataset.hostname); }); });
-        grid.querySelectorAll('.action-restart').forEach(function(b) { b.addEventListener('click', function(e) { e.stopPropagation(); serverAction('restart', this.dataset.hostname); }); });
-        grid.querySelectorAll('.action-start').forEach(function(b) { b.addEventListener('click', function(e) { e.stopPropagation(); serverAction('start', this.dataset.hostname); }); });
-        grid.querySelectorAll('.server-card').forEach(function(c) { c.addEventListener('click', function() { openServer(this.dataset.hostname); }); });
+        var online = onlineList.length;
+        // Hero.
+        var hero = document.getElementById('hero');
+        hero.className = 'hero';
+        if (total === 0) {
+            hero.classList.add('hero-offline');
+            document.getElementById('hero-status').textContent = 'No servers configured';
+            document.getElementById('hero-sub').textContent = 'Go to Settings to add your first server.';
+        } else if (bootingList.length > 0) {
+            hero.classList.add('hero-booting');
+            var s = bootingList[0];
+            var phaseLabels = {waking_host:'Acordando host...', waiting_lxc:'A iniciar container...', starting_mc:'A arrancar o servidor...', stopping:'A desligar...'};
+            document.getElementById('hero-status').textContent = phaseLabels[s.phase] || 'A arrancar...';
+            var since = new Date(s.phase_since);
+            var e = Math.floor((Date.now() - since.getTime()) / 1000);
+            var sub = Math.floor(e/60) + 'm ' + (e%60) + 's';
+            if (s.waiting_count > 0) sub += ' · ' + s.waiting_count + ' jogador(es) à espera';
+            document.getElementById('hero-sub').textContent = sub;
+        } else if (total === 1 && online === 1) {
+            hero.classList.add('hero-online');
+            document.getElementById('hero-status').textContent = 'Pronto para jogar';
+            document.getElementById('hero-sub').textContent = 'O servidor está online.';
+        } else if (online === total) {
+            hero.classList.add('hero-online');
+            document.getElementById('hero-status').textContent = online + '/' + total + ' servidores online';
+            document.getElementById('hero-sub').textContent = 'Tudo pronto.';
+        } else {
+            hero.classList.add('hero-offline');
+            var s = servers[0];
+            document.getElementById('hero-status').textContent = online + '/' + total + ' online · ' + (total-online) + ' offline';
+            document.getElementById('hero-sub').textContent = '';
+        }
+        // Timeline.
+        var tl = document.getElementById('dash-timeline');
+        if (bootingList.length > 0) {
+            tl.style.display = 'flex';
+            buildTimeline(bootingList[0].phase);
+        } else {
+            tl.style.display = 'none';
+        }
+        // Health.
+        api('/api/health').then(function(h) {
+            var html = '';
+            (h.checks||[]).forEach(function(c) {
+                html += '<span title="' + esc(c.message||'') + '" style="color:' + (c.ok ? 'var(--green)' : 'var(--red)') + '">' + (c.ok ? '✓' : '✗') + ' ' + c.name + '</span>';
+            });
+            document.getElementById('dash-health').innerHTML = html;
+        }).catch(function(){});
+        // Server cards (only if 2+).
+        var grid = document.getElementById('server-cards');
+        var empty = document.getElementById('empty-state');
+        if (total === 0) {
+            grid.innerHTML = ''; empty.style.display = '';
+        } else if (total === 1) {
+            grid.innerHTML = ''; empty.style.display = 'none';
+        } else {
+            empty.style.display = 'none';
+            var html = '';
+            servers.forEach(function(s) {
+                var online = s.online, phase = s.phase||'idle';
+                var cardCls = online ? 'online' : (phase==='stopping'?'stopping':(phase!=='idle'&&phase!=='ready'?'booting':''));
+                var badgeLabel = online ? 'Online' : (phase==='stopping'?'Stopping':(phase!=='idle'&&phase!=='ready'?phase.replace(/_/g,' '):'Offline'));
+                var badgeColor = online ? 'var(--green)' : (phase==='stopping'?'var(--red)':(phase!=='idle'&&phase!=='ready'?'var(--orange)':'var(--red)'));
+                var elapsedStr = '';
+                if (!online && phase!=='idle' && phase!=='ready') {
+                    var since = new Date(s.phase_since);
+                    var e = Math.floor((Date.now()-since.getTime())/1000);
+                    var pl = {waking_host:'Acordando Proxmox...',waiting_lxc:'A iniciar LXC...',starting_mc:'A arrancar servidor...',stopping:'A desligar...'}[phase]||phase;
+                    elapsedStr = '<div class="phase-info" style="color:var(--orange);">'+pl+' · '+Math.floor(e/60)+'m '+(e%60)+'s</div>';
+                }
+                var waitingStr = '';
+                if (!online && s.waiting_count>0) waitingStr = '<div class="phase-info" style="color:var(--text-dim);">'+s.waiting_count+' à espera</div>';
+                html += '<div class="server-card '+cardCls+'" data-hostname="'+esc(s.hostname)+'">';
+                html += '<div class="host">'+esc(s.hostname)+'<span class="state-badge" style="background:'+badgeColor+'22;color:'+badgeColor+';">'+badgeLabel+'</span></div>';
+                html += '<div class="addr">'+esc(s.backend)+'</div>';
+                html += elapsedStr + waitingStr;
+                html += '<div class="sactions">';
+                if (s.online) { html += '<button class="btn btn-red btn-sm action-stop" data-hostname="'+esc(s.hostname)+'">Stop</button><button class="btn btn-orange btn-sm action-restart" data-hostname="'+esc(s.hostname)+'">Restart</button>'; }
+                else { html += '<button class="btn btn-green btn-sm action-start" data-hostname="'+esc(s.hostname)+'">Start</button>'; }
+                html += '</div></div>';
+            });
+            grid.innerHTML = html;
+            grid.querySelectorAll('.action-stop').forEach(function(b){b.addEventListener('click',function(e){e.stopPropagation();serverAction('stop',this.dataset.hostname);});});
+            grid.querySelectorAll('.action-restart').forEach(function(b){b.addEventListener('click',function(e){e.stopPropagation();serverAction('restart',this.dataset.hostname);});});
+            grid.querySelectorAll('.action-start').forEach(function(b){b.addEventListener('click',function(e){e.stopPropagation();serverAction('start',this.dataset.hostname);});});
+            grid.querySelectorAll('.server-card').forEach(function(c){c.addEventListener('click',function(){openServer(this.dataset.hostname);});});
+        }
+        // Nav status.
+        updateNavStatus();
     }).catch(function(){});
 }
 
