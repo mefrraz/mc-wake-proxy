@@ -113,6 +113,7 @@ docker run --network host \
 
 - **[docs/proxmox-setup.md](docs/proxmox-setup.md)** — Create a Proxmox API token with minimum privileges.
 - **[docs/crafty-setup.md](docs/crafty-setup.md)** — Generate a Crafty API token and find your `server_id`.
+- **[docs/deploy.md](docs/deploy.md)** — Deploy to Raspberry Pi (git clone, scp, buildx).
 - **[docs/multi-server.md](docs/multi-server.md)** — Future multi-server configuration format.
 
 ---
