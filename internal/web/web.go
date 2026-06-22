@@ -206,6 +206,13 @@ func Start(state *proxy.State, addr, configPath, password string, reloadServers 
 		json.NewEncoder(w).Encode(servers)
 	})
 
+	// Serve logo.
+	mux.HandleFunc("/logo.png", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		http.ServeFile(w, r, "docs/logo.png")
+	})
+
 	state.Logf("WEB: dashboard listening on %s", addr)
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		state.Logf("WEB: server error: %v", err)

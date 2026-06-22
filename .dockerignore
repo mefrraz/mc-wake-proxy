@@ -3,4 +3,5 @@
 .dockerignore
 docker-compose.yml
 *.md
-docs/
+docs/*.md
+

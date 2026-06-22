@@ -1,17 +1,30 @@
 # mc-wake-proxy
 
+<p align="center"><img src="docs/banner.png" alt="mc-wake-proxy" width="800"></p>
+
 A **wake-on-demand** TCP proxy for Minecraft servers running inside a Proxmox LXC, managed by Crafty Controller.
 
-When a player tries to connect to an offline backend, `mc-wake-proxy`:
+When a player connects to an offline backend, `mc-wake-proxy` sends a Wake-on-LAN packet, starts the LXC via Proxmox API, launches the Minecraft server via Crafty Controller, and transparently proxies the connection — all while showing friendly status messages.
 
-1. Sends a **Wake-on-LAN** magic packet to the Proxmox host.
-2. Polls the **Proxmox VE API** to check if the LXC is running, and starts it if not.
-3. Sends a **start_server** command via the **Crafty Controller API**.
-4. Waits for the Minecraft server to accept connections, then **transparently proxies** the player's bytes.
+**v2.4 — Multi-server, dashboard-managed, with console, discover, and secure login.**
 
-During the entire process, players see friendly MOTD/kick messages ("🟡 Waking host…", "🟡 Starting Minecraft…") instead of timeouts.
+---
 
-A **web dashboard** (:8080) shows the current wake phase, time elapsed, and live logs.
+## Features
+
+- **Smart wake chain** — WOL → Proxmox → LXC → Crafty → Minecraft, skips steps already done
+- **Multi-server routing** — hostname-based (`survival.mc.example.com` → backend A, `creative.mc.example.com` → backend B)
+- **Web dashboard** — 4 tabs: Dashboard, Servers (per-server detail), Logs, Settings
+- **Server management** — Add/Remove servers via UI, Discover & import from Crafty Controller
+- **Console** — Send commands to Minecraft servers from the dashboard
+- **Stop / Restart** — Per-server actions via Crafty API
+- **Auto-shutdown** — Stop idle servers after N minutes of zero players
+- **Phase-aware MOTD** — Players see "Offline", "Starting...", "Shutting down...", or "Ready"
+- **Server icon** — Drop a `server-icon.png` for the Minecraft server list
+- **Secure login** — Optional `PROXY_PASSWORD` with session cookie
+- **Health checks** — Proxmox, Crafty, WOL, Backend validated at startup with diagnostic hints
+- **DuckDNS wizard** — Suggested subdomains on the Settings page
+- **ARM + x86** — Multi-arch Docker image
 
 ---
 
@@ -43,22 +56,6 @@ flowchart TD
     end
 ```
 
-### Phase machine
-
-```
-IDLE ──(player connects)──▶ WAKING_HOST ──(host reachable)──▶ WAITING_LXC
-                                                                    │
-                                                           (LXC running)
-                                                                    ▼
-                                                              STARTING_MC
-                                                                    │
-                                                          (backend reachable)
-                                                                    ▼
-                                                                 READY
-```
-
-Each phase is shown on the dashboard with elapsed time. If the chain fails to complete within `COOLDOWN_MINUTES`, the proxy returns to IDLE.
-
 ---
 
 ## Quick Start
@@ -70,25 +67,18 @@ git clone https://github.com/mefrraz/mc-wake-proxy.git
 cd mc-wake-proxy
 ```
 
-### 2. Configure environment
+### 2. Configure
 
-Copy the environment block from `docker-compose.yml` and replace every `<REPLACE_ME>` with your actual values. See the inline comments for each variable.
+Copy `.env.example` to `.env` and fill in your values:
 
-Minimal required variables:
+```bash
+cp .env.example .env
+nano .env
+```
 
-| Variable | Description |
-|---|---|
-| `WOL_MAC` | MAC address of the Proxmox host's physical interface |
-| `WOL_BROADCAST` | IPv4 broadcast address (e.g. `192.168.1.255`) |
-| `BACKEND_TARGET` | `IP:port` of the Minecraft server inside the LXC |
-| `PROXMOX_HOST` | Proxmox hostname or IP |
-| `PROXMOX_NODE` | Proxmox node name (e.g. `pve`) |
-| `PROXMOX_LXC_ID` | LXC container ID |
-| `PROXMOX_TOKEN_ID` | API token ID (`user@realm!tokenname`) |
-| `PROXMOX_TOKEN_SECRET` | API token secret (UUID) |
-| `CRAFTY_HOST` | IP of the LXC running Crafty |
-| `CRAFTY_TOKEN` | Crafty API token |
-| `CRAFTY_SERVER_ID` | Crafty server UUID to manage |
+Required variables: `WOL_MAC`, `WOL_BROADCAST`, `PROXMOX_HOST`, `PROXMOX_NODE`, `PROXMOX_LXC_ID`, `PROXMOX_TOKEN_ID`, `PROXMOX_TOKEN_SECRET`, `CRAFTY_HOST`, `CRAFTY_TOKEN`.
+
+Optional: `PROXY_LANG=pt`, `AUTO_SHUTDOWN_MINUTES=15`, `PROXY_PASSWORD=yourpassword`.
 
 ### 3. Run
 
@@ -96,65 +86,59 @@ Minimal required variables:
 docker compose up -d
 ```
 
-Or build and run directly:
+- Dashboard: `http://<pi-ip>:8080`
+- Minecraft: `<pi-ip>:25565`
 
-```bash
-docker build -t mc-wake-proxy .
-docker run --network host \
-  -e WOL_MAC=... \
-  -e WOL_BROADCAST=... \
-  ... \
-  mc-wake-proxy
-```
+---
+
+## Multi-server setup
+
+Once running, open the **Settings** tab on the dashboard:
+
+1. Click **Discover** to find servers from Crafty
+2. Click **Import** on a server, enter its hostname
+3. The server appears instantly — no restart needed
+
+Servers are stored in `servers.yml` (managed by the dashboard — no manual editing).
+
+---
+
+## Dashboard
+
+| Tab | Content |
+|---|---|
+| **Dashboard** | Phase, elapsed time, health indicators, server cards with start/stop/restart |
+| **Servers** | Server list, click for detail: info, actions, console, server logs |
+| **Logs** | Global event log with copy button |
+| **Settings** | Add server, discover from Crafty, manage servers, DuckDNS suggestions |
 
 ---
 
 ## Setup Guides
 
-- **[docs/proxmox-setup.md](docs/proxmox-setup.md)** — Create a Proxmox API token with minimum privileges.
-- **[docs/crafty-setup.md](docs/crafty-setup.md)** — Generate a Crafty API token and find your `server_id`.
-- **[docs/deploy.md](docs/deploy.md)** — Deploy to Raspberry Pi (git clone, scp, buildx).
-- **[docs/multi-server.md](docs/multi-server.md)** — Future multi-server configuration format.
+- **[docs/proxmox-setup.md](docs/proxmox-setup.md)** — Create a Proxmox API token
+- **[docs/crafty-setup.md](docs/crafty-setup.md)** — Crafty API token and server ID
+- **[docs/deploy.md](docs/deploy.md)** — Deploy to Raspberry Pi
+- **[docs/multi-server.md](docs/multi-server.md)** — Multi-server configuration details
 
 ---
 
 ## Exposing to the Internet
 
-### DuckDNS + Port Forwarding
+1. Register a free subdomain at [duckdns.org](https://duckdns.org)
+2. Forward **TCP port 25565** to the Raspberry Pi
+3. Minecraft traffic is raw TCP — do NOT route through Nginx Proxy Manager
 
-1. Register a free subdomain at [duckdns.org](https://duckdns.org).
-2. Install the DuckDNS update client on your Raspberry Pi (or configure your router if it supports dynamic DNS natively).
-3. On your router, forward **TCP port 25565** to the Raspberry Pi's local IP.
-4. Players connect using `your-subdomain.duckdns.org`.
-
-> **Important**: Minecraft traffic is **raw TCP**, not HTTP. Do NOT route it through Nginx Proxy Manager or any HTTP reverse proxy — those only work for HTTP/HTTPS. The Minecraft port must go directly to the Pi.
-
-### Dashboard access (optional)
-
-If you want remote access to the dashboard (`:8080`), you can:
-- Expose it through NPM as a regular HTTP domain (the dashboard IS HTTP), OR
-- Use a VPN / Tailscale for secure access.
+Secure the dashboard with `PROXY_PASSWORD` if exposing it remotely.
 
 ---
 
 ## Development
 
-### Building
-
 ```bash
-go build ./cmd/proxy/
-```
-
-### Tests
-
-```bash
-go test ./...
-```
-
-### Cross-compile for Raspberry Pi
-
-```bash
-GOOS=linux GOARCH=arm64 go build -o mc-wake-proxy ./cmd/proxy/
+go build ./cmd/proxy/    # Build
+go test ./...            # 42 tests
+GOOS=linux GOARCH=arm64 go build -o mc-wake-proxy ./cmd/proxy/  # Cross-compile for Pi
 ```
 
 ---
@@ -162,9 +146,3 @@ GOOS=linux GOARCH=arm64 go build -o mc-wake-proxy ./cmd/proxy/
 ## License
 
 MIT — see [LICENSE](LICENSE).
-
----
-
-## Roadmap
-
-See [docs/roadmap.md](docs/roadmap.md).
