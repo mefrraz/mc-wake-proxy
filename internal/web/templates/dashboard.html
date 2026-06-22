@@ -132,7 +132,7 @@ th { color: var(--text-dim); font-weight: 500; font-size: 11px; text-transform: 
         </div>
         <div id="servers-detail-view" style="display:none;">
             <div class="toolbar">
-                <button class="btn btn-ghost btn-sm" id="btn-back-servers">Back to list</button>
+                <button class="btn btn-ghost btn-sm" onclick="showServersList()">Back to list</button>
                 <span style="font-weight:600;" id="sd-title"></span>
                 <span></span>
             </div>
@@ -167,7 +167,7 @@ th { color: var(--text-dim); font-weight: 500; font-size: 11px; text-transform: 
         <div class="card">
             <div class="toolbar">
                 <h2 style="margin:0;">Event Log</h2>
-                <button class="btn btn-accent btn-sm" id="btn-copy-logs">Copy</button>
+                <button class="btn btn-accent btn-sm" onclick="copyLogs()">Copy</button>
             </div>
             <div class="logs" id="logs-box">Loading...</div>
         </div>
@@ -182,13 +182,13 @@ th { color: var(--text-dim); font-weight: 500; font-size: 11px; text-transform: 
                 <input type="text" id="add-backend" placeholder="Backend (IP:port)">
                 <input type="text" id="add-serverid" placeholder="Crafty Server ID" style="grid-column:span 2;">
             </div>
-            <button class="btn btn-green" id="btn-add-server" style="margin-top:12px;">Add Server</button>
+            <button class="btn btn-green" id="btn-add-server" style="margin-top:12px;" onclick="addServer()">Add Server</button>
             <span id="add-error" style="color:var(--red);font-size:12px;margin-left:12px;display:none;"></span>
         </div>
         <div class="card">
             <h2>Discover from Crafty</h2>
             <p style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">Import servers directly from your Crafty Controller. Requires "Show Status" enabled on each server in Crafty.</p>
-            <button class="btn btn-accent" id="btn-discover">Discover</button>
+            <button class="btn btn-accent" onclick="discoverServers()">Discover</button>
             <div id="discover-list" style="margin-top:12px;"></div>
         </div>
         <div class="card">
@@ -374,11 +374,7 @@ function showServerDetail(hostname) {
     }).catch(function(){});
 }
 
-document.getElementById('btn-back-servers').addEventListener('click', function() {
-    currentServer = null;
-    showServersList();
-});
-
+// ---- SETTINGS ----
 function serverAction(action, hostname) {
     var labels = { stop: 'Stop', restart: 'Restart', start: 'Start' };
     if (!confirm(labels[action] + ' server "' + hostname + '"?')) return;
@@ -397,14 +393,14 @@ function fetchLogs() {
         el.scrollTop = el.scrollHeight;
     });
 }
-document.getElementById('btn-copy-logs').addEventListener('click', function() {
+function copyLogs() {
     var text = document.getElementById('logs-box').textContent;
     try {
         if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text); }
         else { var ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.left = '-9999px'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); }
         alert('Copied to clipboard');
     } catch(e) { alert('Copy failed'); }
-});
+}
 
 // ---- SETTINGS ----
 function updateSettings() {
@@ -427,7 +423,7 @@ function updateSettings() {
     });
 }
 
-document.getElementById('btn-add-server').addEventListener('click', function() {
+function addServer() {
     var h = document.getElementById('add-hostname').value.trim();
     var b = document.getElementById('add-backend').value.trim();
     var c = document.getElementById('add-serverid').value.trim();
@@ -439,7 +435,7 @@ document.getElementById('btn-add-server').addEventListener('click', function() {
             if (d.error) { err.textContent = d.error; err.style.display = ''; }
             else { document.getElementById('add-hostname').value = ''; document.getElementById('add-backend').value = ''; document.getElementById('add-serverid').value = ''; updateSettings(); updateDashboard(); }
         });
-});
+}
 
 function removeServer(hostname) {
     if (!confirm('Remove server "' + hostname + '"?')) return;
@@ -449,9 +445,7 @@ function removeServer(hostname) {
     });
 }
 
-var btnDiscover = document.getElementById('btn-discover');
-if (btnDiscover) {
-btnDiscover.addEventListener('click', function() {
+function discoverServers() {
     var list = document.getElementById('discover-list');
     if (!list) return;
     list.innerHTML = '<span style="color:var(--text-dim);">Searching Crafty...</span>';
@@ -474,9 +468,8 @@ btnDiscover.addEventListener('click', function() {
                 var name = this.dataset.name;
                 var ip = this.dataset.ip;
                 var port = this.dataset.port;
-                var hostname = prompt('Hostname for this server:', name.toLowerCase().replace(/\\s+/g,'-') + '.mc.example.com');
+                var hostname = prompt('Hostname for this server:', name.toLowerCase().replace(/\s+/g,'-') + '.mc.example.com');
                 if (!hostname) return;
-                // Direct POST — no form filling.
                 api('/api/servers', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({hostname:hostname, backend:ip+':'+port, crafty_server_id:id}) })
                     .then(function(d) {
                         if (d.error) { alert(d.error); return; }
@@ -486,7 +479,6 @@ btnDiscover.addEventListener('click', function() {
             });
         });
     }).catch(function(err) { list.innerHTML = '<span style="color:var(--red);">Could not connect to Crafty: ' + (err.message || err) + '</span>'; });
-});
 }
 
 // ---- Init ----
