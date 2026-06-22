@@ -149,7 +149,10 @@
         </div>
 
         <div class="card">
-            <h2>Event Log</h2>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                <h2 style="margin-bottom:0;">Event Log</h2>
+                <button onclick="copyLogs()" style="background:var(--surface);color:var(--accent);border:1px solid var(--border);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;">📋 Copy</button>
+            </div>
             <div class="logs" id="logs">Loading...</div>
         </div>
 
@@ -219,6 +222,15 @@
                     });
                 })
                 .catch(() => {});
+        }
+
+        function copyLogs() {
+            const text = document.getElementById('logs').textContent;
+            navigator.clipboard.writeText(text).then(function() {
+                const btn = event.target;
+                btn.textContent = '✅ Copied!';
+                setTimeout(function() { btn.textContent = '📋 Copy'; }, 1500);
+            });
         }
 
         setInterval(update, 2000);
