@@ -3,6 +3,7 @@
 package mcproto
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -57,6 +58,13 @@ func ReadString(r io.Reader) (string, error) {
 	return string(buf), err
 }
 
+// ReadStringFromBytes reads a Minecraft string from a byte slice, returning the
+// decoded string and the remaining bytes.  Useful for parsing raw packets.
+func ReadStringFromBytes(b []byte) (string, error) {
+	r := bytes.NewReader(b)
+	return ReadString(r)
+}
+
 // WriteString encodes a string as length-prefixed VarInt + UTF-8 bytes.
 func WriteString(s string) []byte {
 	b := []byte(s)
@@ -70,6 +78,25 @@ func MakePacket(id int, data []byte) []byte {
 	return append(WriteVarInt(len(body)), body...)
 }
 
+// ReadPacketRaw reads a full length-prefixed Minecraft packet and returns the
+// complete raw bytes (length prefix + body).  Callers can replay these bytes
+// directly on a backend connection.
+func ReadPacketRaw(r io.Reader) ([]byte, error) {
+	length, err := ReadVarInt(r)
+	if err != nil {
+		return nil, fmt.Errorf("mcproto: read packet length: %w", err)
+	}
+	if length < 0 || length > 2097151 { // 2 MiB sanity cap
+		return nil, fmt.Errorf("mcproto: packet length %d out of range", length)
+	}
+	body := make([]byte, length)
+	if _, err := io.ReadFull(r, body); err != nil {
+		return nil, fmt.Errorf("mcproto: read packet body: %w", err)
+	}
+	full := append(WriteVarInt(length), body...)
+	return full, nil
+}
+
 // Handshake holds the parsed fields of a Minecraft Handshake packet (0x00).
 type Handshake struct {
 	ProtocolVersion int
@@ -78,8 +105,48 @@ type Handshake struct {
 	NextState       int // 1 = status, 2 = login
 }
 
+// ParseHandshake parses a Handshake packet from raw body bytes (after length + packet ID).
+func ParseHandshake(body []byte) (*Handshake, error) {
+	r := bytes.NewReader(body)
+
+	// Skip packet ID (already verified as 0x00 by caller).
+	pktID, err := ReadVarInt(r)
+	if err != nil {
+		return nil, fmt.Errorf("mcproto: handshake packet ID: %w", err)
+	}
+	if pktID != 0x00 {
+		return nil, fmt.Errorf("mcproto: expected handshake packet ID 0x00, got 0x%02x", pktID)
+	}
+
+	h := &Handshake{}
+
+	h.ProtocolVersion, err = ReadVarInt(r)
+	if err != nil {
+		return nil, fmt.Errorf("mcproto: handshake protocol_version: %w", err)
+	}
+
+	h.ServerAddress, err = ReadString(r)
+	if err != nil {
+		return nil, fmt.Errorf("mcproto: handshake server_address: %w", err)
+	}
+
+	portBytes := make([]byte, 2)
+	if _, err := io.ReadFull(r, portBytes); err != nil {
+		return nil, fmt.Errorf("mcproto: handshake server_port: %w", err)
+	}
+	h.ServerPort = binary.BigEndian.Uint16(portBytes)
+
+	h.NextState, err = ReadVarInt(r)
+	if err != nil {
+		return nil, fmt.Errorf("mcproto: handshake next_state: %w", err)
+	}
+
+	return h, nil
+}
+
 // ReadHandshake parses a Handshake packet from the reader.
 // Assumes the packet length VarInt and packet ID (0x00) have already been consumed.
+// Deprecated: prefer ReadPacketRaw + ParseHandshake for proxy replay support.
 func ReadHandshake(r io.Reader) (*Handshake, error) {
 	h := &Handshake{}
 	var err error

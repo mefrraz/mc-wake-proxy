@@ -160,3 +160,68 @@ func TestLoginDisconnect(t *testing.T) {
 		t.Fatalf("unexpected chat: %s", chat)
 	}
 }
+
+func TestReadPacketRaw(t *testing.T) {
+	// Build a handshake packet body.
+	var body []byte
+	body = append(body, WriteVarInt(758)...)
+	body = append(body, WriteString("test.example.com")...)
+	body = append(body, 0x63, 0xDD) // port 25565
+	body = append(body, WriteVarInt(2)...) // next_state=login
+
+	hsPkt := MakePacket(0x00, body)
+
+	// Read it back.
+	raw, err := ReadPacketRaw(bytes.NewReader(hsPkt))
+	if err != nil {
+		t.Fatalf("ReadPacketRaw: %v", err)
+	}
+
+	// Verify the raw bytes roundtrip.
+	if len(raw) != len(hsPkt) {
+		t.Fatalf("roundtrip length mismatch: %d vs %d", len(raw), len(hsPkt))
+	}
+	for i := range raw {
+		if raw[i] != hsPkt[i] {
+			t.Fatalf("roundtrip byte %d: %d vs %d", i, raw[i], hsPkt[i])
+		}
+	}
+}
+
+func TestParseHandshakeFromRaw(t *testing.T) {
+	// Build a handshake body (without length prefix).
+	var body []byte
+	body = append(body, WriteVarInt(0x00)...) // packet ID
+	body = append(body, WriteVarInt(758)...)
+	body = append(body, WriteString("survival.mc.example.com")...)
+	body = append(body, 0x63, 0xDD)           // port 25565
+	body = append(body, WriteVarInt(2)...)    // next_state=login
+
+	hs, err := ParseHandshake(body)
+	if err != nil {
+		t.Fatalf("ParseHandshake: %v", err)
+	}
+	if hs.ProtocolVersion != 758 {
+		t.Fatalf("expected proto 758, got %d", hs.ProtocolVersion)
+	}
+	if hs.ServerAddress != "survival.mc.example.com" {
+		t.Fatalf("expected hostname, got %q", hs.ServerAddress)
+	}
+	if hs.ServerPort != 25565 {
+		t.Fatalf("expected port 25565, got %d", hs.ServerPort)
+	}
+	if hs.NextState != 2 {
+		t.Fatalf("expected nextState 2, got %d", hs.NextState)
+	}
+}
+
+func TestReadStringFromBytes(t *testing.T) {
+	encoded := WriteString("hello proxy")
+	s, err := ReadStringFromBytes(encoded)
+	if err != nil {
+		t.Fatalf("ReadStringFromBytes: %v", err)
+	}
+	if s != "hello proxy" {
+		t.Fatalf("expected 'hello proxy', got %q", s)
+	}
+}

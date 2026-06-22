@@ -24,6 +24,7 @@ services:
       # ---- Required: Crafty Controller API ----
       - CRAFTY_HOST=<REPLACE_ME>       # Crafty hostname or IP (e.g. 192.168.1.131)
       # CRAFTY_PORT=8443               # Optional, default 8443
+      # CRAFTY_SCHEME=https            # Optional, default https (use http for plain-text Crafty)
       - CRAFTY_TOKEN=<REPLACE_ME>      # Crafty API token (Bearer auth)
       - CRAFTY_SERVER_ID=<REPLACE_ME>  # Crafty server UUID to manage
       # CRAFTY_INSECURE_SKIP_VERIFY=true # Optional, default true

@@ -30,7 +30,7 @@ func main() {
 	// Wire up dependencies.
 	wolSender := wol.UDPSender{}
 	pmClient := proxmox.NewClient(cfg.ProxmoxHost, cfg.ProxmoxPort, cfg.ProxmoxTokenID, cfg.ProxmoxTokenSecret, cfg.ProxmoxInsecure)
-	cmClient := crafty.NewClient(cfg.CraftyHost, cfg.CraftyPort, cfg.CraftyToken, cfg.CraftyInsecure)
+	cmClient := crafty.NewClient(cfg.CraftyHost, cfg.CraftyPort, cfg.CraftyScheme, cfg.CraftyToken, cfg.CraftyInsecure)
 
 	p := proxy.New(cfg, state, wolSender, pmClient, cmClient)
 

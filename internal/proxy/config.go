@@ -32,6 +32,7 @@ type Config struct {
 	// Crafty Controller connection.
 	CraftyHost     string
 	CraftyPort     string
+	CraftyScheme   string
 	CraftyToken    string
 	CraftyInsecure bool
 	CraftyServerID string
@@ -61,6 +62,7 @@ func LoadConfig() (*Config, error) {
 		ProxmoxInsecure:   getEnvBool("PROXMOX_INSECURE_SKIP_VERIFY", true),
 		CraftyHost:        os.Getenv("CRAFTY_HOST"),
 		CraftyPort:        getEnv("CRAFTY_PORT", "8443"),
+		CraftyScheme:      getEnv("CRAFTY_SCHEME", "https"),
 		CraftyToken:       os.Getenv("CRAFTY_TOKEN"),
 		CraftyInsecure:    getEnvBool("CRAFTY_INSECURE_SKIP_VERIFY", true),
 		CraftyServerID:    os.Getenv("CRAFTY_SERVER_ID"),

@@ -23,12 +23,16 @@ type Client struct {
 // Parameters:
 //   - host: Crafty hostname or IP (e.g. "192.168.1.131").
 //   - port: Crafty web port (usually "8443" or "8000").
+//   - scheme: "https" (default) or "http" for plain-text Crafty.
 //   - token: API token obtained from the Crafty web interface.
 //   - insecure: if true, skip TLS certificate verification.
-func NewClient(host, port, token string, insecure bool) *Client {
-	baseURL := fmt.Sprintf("https://%s:%s/api/v2", host, port)
+func NewClient(host, port, scheme, token string, insecure bool) *Client {
+	baseURL := fmt.Sprintf("%s://%s:%s/api/v2", scheme, host, port)
 	transport := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: insecure},
+	}
+	if scheme == "http" {
+		transport.TLSClientConfig = nil // no TLS for plain HTTP
 	}
 	return &Client{
 		baseURL: baseURL,
