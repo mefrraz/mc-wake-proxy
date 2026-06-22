@@ -220,6 +220,9 @@ function api(url, opts) {
 function esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+function escq(s) {
+    return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+}
 
 // ---- Navigation ----
 document.querySelectorAll('nav a').forEach(function(a) {
@@ -457,7 +460,7 @@ function discoverServers() {
             html += '<tr>';
             html += '<td><b>' + esc(s.name) + '</b></td>';
             html += '<td style="font-family:var(--mono);color:var(--text-dim);">' + esc(s.ip) + ':' + s.port + '</td>';
-            html += '<td style="text-align:right;"><button class="btn btn-green btn-sm" onclick="importDiscovered(\'' + esc(s.id) + '\',\'' + esc(s.name) + '\',\'' + esc(s.ip) + '\',' + s.port + ')">Import</button></td>';
+            html += '<td style="text-align:right;"><button class="btn btn-green btn-sm" onclick="importDiscovered(\'' + escq(s.id) + '\',\'' + escq(s.name) + '\',\'' + escq(s.ip) + '\',' + s.port + ')">Import</button></td>';
             html += '</tr>';
         });
         html += '</table>';
