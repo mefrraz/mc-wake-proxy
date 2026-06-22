@@ -110,10 +110,9 @@ func ReadHandshake(r io.Reader) (*Handshake, error) {
 }
 
 // StatusResponse builds a Server List Ping response packet.
-func StatusResponse(jsonPayload string, protocolVersion int, online, max int) []byte {
-	// The JSON includes version, players, and description (MOTD).
-	json := fmt.Sprintf(jsonPayload, protocolVersion, max, online)
-	return MakePacket(0x00, WriteString(json))
+// jsonPayload is the pre-formatted JSON status string.
+func StatusResponse(jsonPayload string) []byte {
+	return MakePacket(0x00, WriteString(jsonPayload))
 }
 
 // PongResponse builds a Pong packet (0x01) echoing back the 8-byte payload.

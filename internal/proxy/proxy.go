@@ -112,7 +112,7 @@ func (p *Proxy) handleStatus(client net.Conn, hs *mcproto.Handshake) {
 
 	st := p.state.Status()
 	jsonResp := fmt.Sprintf(statusJSON, hs.ProtocolVersion, st.MaxPlayers, st.Players, escapeJSON(motd))
-	_, _ = client.Write(mcproto.StatusResponse(jsonResp, hs.ProtocolVersion, st.MaxPlayers, st.Players))
+	_, _ = client.Write(mcproto.StatusResponse(jsonResp))
 
 	// Handle Ping (0x01) if client sends it.
 	_, _ = mcproto.ReadVarInt(client) // length

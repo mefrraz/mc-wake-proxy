@@ -97,12 +97,12 @@ func TestReadHandshakeMultiServer(t *testing.T) {
 }
 
 func TestStatusResponse(t *testing.T) {
-	tmpl := `{"version":{"name":"Proxy","protocol":%d},"players":{"max":%d,"online":%d},"description":{"text":"Hello"}}`
-	pkt := StatusResponse(tmpl, 758, 10, 3)
+	jsonStr := `{"version":{"name":"Proxy","protocol":758},"players":{"max":10,"online":3},"description":{"text":"Hello"}}`
+	pkt := StatusResponse(jsonStr)
 
 	// Verify packet structure
 	r := bytes.NewReader(pkt)
-	length, err := ReadVarInt(r)
+	_, err := ReadVarInt(r)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,14 +113,13 @@ func TestStatusResponse(t *testing.T) {
 	if pktID != 0x00 {
 		t.Fatalf("expected packet ID 0x00, got 0x%02x", pktID)
 	}
-	jsonStr, err := ReadString(r)
+	decodedJSON, err := ReadString(r)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if jsonStr == "" {
+	if decodedJSON == "" {
 		t.Fatal("expected non-empty JSON")
 	}
-	_ = length // used
 }
 
 func TestPongResponse(t *testing.T) {
