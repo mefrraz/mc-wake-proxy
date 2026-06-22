@@ -2,11 +2,14 @@ package web
 
 import (
 	"crypto/sha256"
+	"crypto/subtle"
 	"embed"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/mefrraz/mc-wake-proxy/internal/proxy"
 )
@@ -43,19 +46,47 @@ func Start(state *proxy.State, addr, configPath, password string, reloadServers 
 		return false
 	}
 
+	// Rate limiting for login.
+	var loginMu sync.Mutex
+	loginAttempts := make(map[string]int)       // IP → count
+	loginBlockedUntil := make(map[string]time.Time) // IP → block time
+
 	// Login handler.
 	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
 		if password == "" {
 			http.Redirect(w, r, "/", http.StatusSeeOther)
 			return
 		}
+		ip := r.RemoteAddr
+		loginMu.Lock()
+		if until, ok := loginBlockedUntil[ip]; ok && time.Now().Before(until) {
+			loginMu.Unlock()
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusTooManyRequests)
+			w.Write([]byte(`<html><body style="background:#0f1419;color:#e2e6ed;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;"><div><h2>Too many attempts</h2><p>Try again in a few minutes.</p></div></body></html>`))
+			return
+		}
+		loginMu.Unlock()
 		if r.Method == "POST" {
 			r.ParseForm()
-			if r.FormValue("password") == password {
-				http.SetCookie(w, &http.Cookie{Name: "mc_session", Value: sessionToken, Path: "/", MaxAge: 86400 * 30, HttpOnly: true})
+			submitted := r.FormValue("password")
+			// Constant-time comparison.
+			ok := subtle.ConstantTimeCompare([]byte(submitted), []byte(password)) == 1
+			if ok {
+				loginMu.Lock()
+				delete(loginAttempts, ip)
+				loginMu.Unlock()
+				http.SetCookie(w, &http.Cookie{Name: "mc_session", Value: sessionToken, Path: "/", MaxAge: 86400 * 30, HttpOnly: true, SameSite: http.SameSiteStrictMode})
 				http.Redirect(w, r, "/", http.StatusSeeOther)
 				return
 			}
+			loginMu.Lock()
+			loginAttempts[ip]++
+			if loginAttempts[ip] >= 5 {
+				loginBlockedUntil[ip] = time.Now().Add(5 * time.Minute)
+				delete(loginAttempts, ip)
+			}
+			loginMu.Unlock()
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.Write([]byte(`<html><body style="background:#0f1419;color:#e2e6ed;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;"><form method=post><h2>mc-wake-proxy</h2><input name=password type=password placeholder=Password autofocus style="padding:8px;border-radius:6px;border:1px solid #2a3140;background:#1a1f2b;color:#e2e6ed;font-size:14px;"><button style="margin-left:8px;padding:8px 16px;border-radius:6px;border:none;background:#4f8cff;color:#fff;font-weight:600;cursor:pointer;">Login</button><p style="color:#e74c3c;font-size:12px;">Wrong password</p></form></body></html>`))
 			return
@@ -64,15 +95,11 @@ func Start(state *proxy.State, addr, configPath, password string, reloadServers 
 		w.Write([]byte(`<html><body style="background:#0f1419;color:#e2e6ed;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;"><form method=post><h2>mc-wake-proxy</h2><input name=password type=password placeholder=Password autofocus style="padding:8px;border-radius:6px;border:1px solid #2a3140;background:#1a1f2b;color:#e2e6ed;font-size:14px;"><button style="margin-left:8px;padding:8px 16px;border-radius:6px;border:none;background:#4f8cff;color:#fff;font-weight:600;cursor:pointer;">Login</button></form></body></html>`))
 	})
 
-	// Root — redirect to login if needed.
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" {
-			http.NotFound(w, r)
-			return
-		}
+	// Root and sub-pages — all serve the SPA dashboard.
+	serveSPA := func(w http.ResponseWriter, r *http.Request) {
 		if sessionToken != "" {
 			cookie, err := r.Cookie("mc_session")
-			if err != nil || cookie.Value != sessionToken {
+			if err != nil || subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(sessionToken)) != 1 {
 				http.Redirect(w, r, "/login", http.StatusSeeOther)
 				return
 			}
@@ -80,12 +107,26 @@ func Start(state *proxy.State, addr, configPath, password string, reloadServers 
 		data, _ := dashboardHTML.ReadFile("templates/dashboard.html")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(data)
+	}
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/manifest.json" || r.URL.Path == "/logo.png" || strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/login" {
+			return // handled by other mux handlers
+		}
+		serveSPA(w, r)
 	})
 
-	// API handlers (all wrapped with auth).
+	// API handlers (all wrapped with auth + CSRF for mutating methods).
 	api := func(path string, h http.HandlerFunc) {
 		mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 			if !checkAuth(w, r) { return }
+			if r.Method == "POST" || r.Method == "PUT" || r.Method == "DELETE" || r.Method == "PATCH" {
+				if r.Header.Get("X-Requested-With") != "mc-wake-proxy" {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusForbidden)
+					json.NewEncoder(w).Encode(map[string]string{"error": "csrf"})
+					return
+				}
+			}
 			h(w, r)
 		})
 	}
@@ -131,14 +172,22 @@ func Start(state *proxy.State, addr, configPath, password string, reloadServers 
 			entries := state.ServerEntries()
 			statuses := state.ServerStatuses()
 			type si struct {
-				Hostname       string `json:"hostname"`
-				Backend        string `json:"backend"`
-				CraftyServerID string `json:"crafty_server_id"`
-				Online         bool   `json:"online"`
+				Hostname       string    `json:"hostname"`
+				Backend        string    `json:"backend"`
+				CraftyServerID string    `json:"crafty_server_id"`
+				Online         bool      `json:"online"`
+				Phase          string    `json:"phase"`
+				PhaseSince     time.Time `json:"phase_since"`
+				WaitingCount   int       `json:"waiting_count"`
 			}
 			out := make([]si, 0, len(entries))
 			for _, e := range entries {
-				out = append(out, si{e.Hostname, e.Backend, e.CraftyServerID, statuses[e.Hostname]})
+				out = append(out, si{
+					e.Hostname, e.Backend, e.CraftyServerID, statuses[e.Hostname],
+					string(state.PhaseForServer(e.Hostname)),
+					state.PhaseSinceForServer(e.Hostname),
+					state.ServerWaitingCount(e.Hostname),
+				})
 			}
 			json.NewEncoder(w).Encode(out)
 		case "POST":
@@ -215,6 +264,13 @@ func Start(state *proxy.State, addr, configPath, password string, reloadServers 
 		w.Header().Set("Content-Type", "image/png")
 		w.Header().Set("Cache-Control", "public, max-age=86400")
 		w.Write(logoPNG)
+	})
+
+	// Serve PWA manifest.
+	mux.HandleFunc("/manifest.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		w.Write([]byte(`{"name":"mc-wake-proxy","short_name":"WakeProxy","start_url":"/","display":"standalone","background_color":"#0f1419","theme_color":"#1a1f2b","icons":[{"src":"/logo.png","sizes":"512x512","type":"image/png"}]}`))
 	})
 
 	state.Logf("WEB: dashboard listening on %s", addr)

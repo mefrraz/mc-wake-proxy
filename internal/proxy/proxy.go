@@ -300,6 +300,7 @@ func (p *Proxy) handleLogin(client net.Conn, hs *mcproto.Handshake, hsRaw, lsRaw
 	// If server is stopping, reject.
 	if p.state.PhaseForServer(hostname) == PhaseStopping {
 		p.state.Logf("MC: %s joining %s — server is stopping, rejecting", player, hostname)
+		p.state.IncWaiting(hostname)
 		p.kickClient(client, p.state.LangPack().KickStopping)
 		return
 	}
@@ -313,6 +314,7 @@ func (p *Proxy) handleLogin(client net.Conn, hs *mcproto.Handshake, hsRaw, lsRaw
 
 	// If already booting for this server, kick.
 	if p.state.PhaseForServer(hostname) != PhaseIdle && p.state.PhaseForServer(hostname) != PhaseReady {
+		p.state.IncWaiting(hostname)
 		p.kickClient(client, p.state.LangPack().KickBooting)
 		return
 	}
@@ -324,6 +326,7 @@ func (p *Proxy) handleLogin(client net.Conn, hs *mcproto.Handshake, hsRaw, lsRaw
 	}
 
 	p.state.SetPhaseForServer(hostname, PhaseWakingHost)
+	p.state.IncWaiting(hostname)
 	p.state.Logf("WAKE: %s triggered wake for %s", player, hostname)
 
 	go p.wakeSequence(hostname, backend, craftyID)

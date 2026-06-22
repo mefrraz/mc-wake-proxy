@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>mc-wake-proxy</title>
 <link rel="icon" type="image/png" href="/logo.png">
+<link rel="manifest" href="/manifest.json">
 <style>
 :root {
     --bg: #0f1419; --surface: #1a1f2b; --border: #2a3140;
@@ -86,6 +87,16 @@ th { color: var(--text-dim); font-weight: 500; font-size: 11px; text-transform: 
 .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
 .server-icon { width: 64px; height: 64px; border-radius: 6px; float: left; margin-right: 14px; }
 .clear { clear: both; }
+.toast {
+    position: fixed; bottom: 24px; right: 24px; z-index: 999;
+    padding: 12px 20px; border-radius: 8px; font-size: 13px; font-weight: 600;
+    color: #fff; animation: toastIn .3s ease; max-width: 360px;
+}
+.toast-ok { background: var(--green); }
+.toast-err { background: var(--red); }
+@keyframes toastIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+.pulse { animation: pulse 1.2s ease-in-out infinite; }
 </style>
 </head>
 <body>
@@ -93,13 +104,14 @@ th { color: var(--text-dim); font-weight: 500; font-size: 11px; text-transform: 
 <nav>
     <div class="logo"><span class="dot" id="nav-dot"></span>mc-wake-proxy</div>
     <div style="display:flex;gap:4px;flex:1;justify-content:center;">
-        <a data-tab="dash" class="active">Dashboard</a>
-        <a data-tab="servers">Servers</a>
-        <a data-tab="logs">Logs</a>
-        <a data-tab="settings">Settings</a>
-        <a data-tab="docs">Docs</a>
+        <a href="/" data-tab="dash" class="active">Dashboard</a>
+        <a href="/servers" data-tab="servers">Servers</a>
+        <a href="/logs" data-tab="logs">Logs</a>
+        <a href="/settings" data-tab="settings">Settings</a>
+        <a href="/docs" data-tab="docs">Docs</a>
     </div>
     <a id="nav-crafty" style="font-size:11px;color:var(--text-dim);text-decoration:none;white-space:nowrap;" target="_blank"></a>
+    <span id="nav-status" style="font-size:11px;color:var(--text-dim);margin-left:12px;display:flex;align-items:center;gap:4px;"></span>
 </nav>
 
 <main>
@@ -302,6 +314,11 @@ var currentTab = 'dash';
 var currentServer = null;
 
 function api(url, opts) {
+    opts = opts || {};
+    if (opts.method === 'POST' || opts.method === 'DELETE') {
+        opts.headers = opts.headers || {};
+        opts.headers['X-Requested-With'] = 'mc-wake-proxy';
+    }
     return fetch(url, opts).then(function(r) { return r.json(); });
 }
 
@@ -314,8 +331,23 @@ function escq(s) {
 
 // ---- Navigation ----
 document.querySelectorAll('nav a').forEach(function(a) {
-    a.addEventListener('click', function() { switchTab(this.dataset.tab); });
+    a.addEventListener('click', function(e) {
+        e.preventDefault();
+        var id = this.dataset.tab;
+        history.pushState(null, '', this.href);
+        switchTab(id);
+    });
 });
+
+// Detect tab from URL path.
+function tabFromPath() {
+    var p = window.location.pathname;
+    if (p === '/servers') return 'servers';
+    if (p === '/logs') return 'logs';
+    if (p === '/settings') return 'settings';
+    if (p === '/docs') return 'docs';
+    return 'dash';
+}
 
 function switchTab(id) {
     currentTab = id;
@@ -363,9 +395,20 @@ function updateDashboard() {
         var html = '';
         servers.forEach(function(s) {
             var dot = '<span class="status-dot" style="background:' + (s.online ? 'var(--green)' : 'var(--red)') + ';"></span>';
+            var elapsedStr = '';
+            if (!s.online && s.phase && s.phase !== 'idle' && s.phase !== 'ready') {
+                var since = new Date(s.phase_since);
+                var e = Math.floor((Date.now() - since.getTime()) / 1000);
+                elapsedStr = '<div style="font-size:11px;color:var(--orange);margin-top:4px;">' + s.phase.replace(/_/g,' ') + ' ' + Math.floor(e/60) + 'm ' + (e%60) + 's</div>';
+            }
+            var waitingStr = '';
+            if (!s.online && s.waiting_count > 0) {
+                waitingStr = '<div style="font-size:11px;color:var(--text-dim);margin-top:2px;">' + s.waiting_count + ' player(s) waiting</div>';
+            }
             html += '<div class="server-card" data-hostname="' + esc(s.hostname) + '">';
             html += '<div class="host">' + dot + esc(s.hostname) + '</div>';
             html += '<div class="addr">' + esc(s.backend) + '</div>';
+            html += elapsedStr + waitingStr;
             html += '<div class="sactions">';
             if (s.online) {
                 html += '<button class="btn btn-red btn-sm action-stop" data-hostname="' + esc(s.hostname) + '">Stop</button>';
@@ -487,6 +530,12 @@ function sendConsoleCmd() {
     if (!currentServer) return;
     var cmd = document.getElementById('sd-cmd').value.trim();
     if (!cmd) return;
+    // Confirm sensitive commands.
+    var sensitive = ['stop','restart','op','deop','ban','ban-ip','pardon','pardon-ip','kick','whitelist','debug','reload','save-all','save-off','save-on'];
+    var firstWord = cmd.split(' ')[0].toLowerCase();
+    if (sensitive.indexOf(firstWord) !== -1) {
+        if (!confirm('Command "' + firstWord + '" can affect the server. Send it?')) return;
+    }
     api('/api/console?hostname=' + encodeURIComponent(currentServer) + '&cmd=' + encodeURIComponent(cmd), { method: 'POST' }).then(function(data) {
         if (data.error) { alert(data.error); return; }
         document.getElementById('sd-cmd').value = '';
@@ -578,11 +627,17 @@ function discoverServers() {
             html += '<tr>';
             html += '<td><b>' + esc(s.name) + '</b></td>';
             html += '<td style="font-family:var(--mono);color:var(--text-dim);">' + esc(s.ip) + ':' + s.port + '</td>';
-            html += '<td style="text-align:right;"><button class="btn btn-green btn-sm" onclick="alert(\'import click: ' + escq(s.name) + '\');importDiscovered(\'' + escq(s.id) + '\',\'' + escq(s.name) + '\',\'' + escq(s.ip) + '\',' + s.port + ')">Import</button></td>';
+            html += '<td style="text-align:right;"><button class="btn btn-green btn-sm btn-import" data-id="' + esc(s.id) + '" data-name="' + esc(s.name) + '" data-ip="' + esc(s.ip) + '" data-port="' + s.port + '">Import</button></td>';
             html += '</tr>';
         });
         html += '</table>';
         list.innerHTML = html;
+        list.querySelectorAll('.btn-import').forEach(function(b) {
+            b.addEventListener('click', function() {
+                var id = this.dataset.id, name = this.dataset.name, ip = this.dataset.ip, port = this.dataset.port;
+                importDiscovered(id, name, ip, port);
+            });
+        });
     }).catch(function(err) { list.innerHTML = '<span style="color:var(--red);">Could not connect to Crafty: ' + (err.message || err) + '</span>'; });
 }
 
@@ -609,15 +664,38 @@ function generateSubdomain() {
     document.getElementById('duck-result').style.color = 'var(--green)';
 }
 
+function toast(msg, ok) {
+    var d = document.createElement('div');
+    d.className = 'toast ' + (ok ? 'toast-ok' : 'toast-err');
+    d.textContent = msg;
+    document.body.appendChild(d);
+    setTimeout(function() { d.style.opacity = '0'; d.style.transition = 'opacity .3s'; setTimeout(function() { d.remove(); }, 300); }, 3000);
+}
+
+function updateNavStatus() {
+    api('/api/servers').then(function(servers) {
+        var online = 0, total = (servers||[]).length;
+        (servers||[]).forEach(function(s) { if (s.online) online++; });
+        var dot = document.getElementById('nav-dot');
+        var el = document.getElementById('nav-status');
+        if (total === 0) { el.innerHTML = ''; return; }
+        el.innerHTML = online + '/' + total + ' online';
+        dot.classList.toggle('pulse', online < total);
+    }).catch(function(){});
+}
+
 // ---- Init ----
+switchTab(tabFromPath());
 setInterval(function() {
     if (currentTab === 'dash') updateDashboard();
     if (currentTab === 'logs') fetchLogs();
     if (currentTab === 'servers' && currentServer) showServerDetail(currentServer);
+    updateNavStatus();
 }, 3000);
 updateDashboard();
 fetchLogs();
 updateSettings();
+updateNavStatus();
 </script>
 </body>
 </html>

@@ -66,12 +66,13 @@ var locales = map[string]LangPack{
 
 // serverState tracks the runtime status of a single Minecraft backend.
 type serverState struct {
-	online bool
-	phase  Phase
-	phaseSince time.Time
-	players    int
-	playerList []string
-	logs       []string
+	online       bool
+	phase        Phase
+	phaseSince   time.Time
+	players      int
+	playerList   []string
+	logs         []string
+	waitingCount int // players who tried to join while waking
 }
 
 // State is the global proxy state, safe for concurrent use.
@@ -199,6 +200,18 @@ func (s *State) PhaseForServer(hostname string) Phase {
 	return s.phase
 }
 
+// PhaseSinceForServer returns when the current phase started for a server.
+func (s *State) PhaseSinceForServer(hostname string) time.Time {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if hostname != "" {
+		if ss, ok := s.servers[hostname]; ok {
+			return ss.phaseSince
+		}
+	}
+	return s.phaseSince
+}
+
 // IsOnline returns true if a specific backend is online.
 // hostname is the server's hostname (empty = global default).
 func (s *State) IsOnline(hostname string) bool {
@@ -236,6 +249,7 @@ func (s *State) SetOnline(hostname string) {
 		ss.online = true
 		ss.phase = PhaseReady
 		ss.phaseSince = time.Now()
+		ss.waitingCount = 0
 	}
 }
 
@@ -363,6 +377,35 @@ func (s *State) CraftyNode() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.craftyNode
+}
+
+// IncWaiting increments the waiting player count for a server.
+func (s *State) IncWaiting(hostname string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ss := s.ensureServer(hostname)
+	if ss != nil {
+		ss.waitingCount++
+	}
+}
+
+// ResetWaiting resets the waiting player count for a server.
+func (s *State) ResetWaiting(hostname string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if ss, ok := s.servers[hostname]; ok {
+		ss.waitingCount = 0
+	}
+}
+
+// ServerWaitingCount returns the waiting count for a server.
+func (s *State) ServerWaitingCount(hostname string) int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if ss, ok := s.servers[hostname]; ok {
+		return ss.waitingCount
+	}
+	return 0
 }
 
 // UpdatePlayers updates the player list from a Crafty or external source.
