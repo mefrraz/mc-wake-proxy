@@ -449,8 +449,11 @@ function removeServer(hostname) {
     });
 }
 
-document.getElementById('btn-discover').addEventListener('click', function() {
+var btnDiscover = document.getElementById('btn-discover');
+if (btnDiscover) {
+btnDiscover.addEventListener('click', function() {
     var list = document.getElementById('discover-list');
+    if (!list) return;
     list.innerHTML = '<span style="color:var(--text-dim);">Searching Crafty...</span>';
     api('/api/crafty/servers').then(function(servers) {
         if (servers.error) { list.innerHTML = '<span style="color:var(--red);">Error: ' + esc(servers.error) + '</span>'; return; }
@@ -482,8 +485,9 @@ document.getElementById('btn-discover').addEventListener('click', function() {
                     });
             });
         });
-    }).catch(function() { list.innerHTML = '<span style="color:var(--red);">Could not connect to Crafty.</span>'; });
+    }).catch(function(err) { list.innerHTML = '<span style="color:var(--red);">Could not connect to Crafty: ' + (err.message || err) + '</span>'; });
 });
+}
 
 // ---- Init ----
 setInterval(function() {

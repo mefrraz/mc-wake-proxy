@@ -178,13 +178,17 @@ func (p *Proxy) StartAutoShutdown() {
 
 // resolveServer returns the backend and crafty_server_id for a hostname.
 // In multi-server mode, looks up the server entry. Falls back to global config.
-func (p *Proxy) resolveServer(hostname string) (backend, craftyServerID string) {
+// The ok return value is false if the hostname is unknown in multi-server mode.
+func (p *Proxy) resolveServer(hostname string) (backend, craftyServerID string, ok bool) {
 	if p.cfg.Servers != nil {
 		if entry := p.cfg.Servers.Lookup(hostname); entry != nil {
-			return entry.Backend, entry.CraftyServerID
+			return entry.Backend, entry.CraftyServerID, true
 		}
+		// Multi-server mode: hostname not found.
+		return "", "", false
 	}
-	return p.cfg.BackendTarget, p.cfg.CraftyServerID
+	// Single-server mode: always fall back to global config.
+	return p.cfg.BackendTarget, p.cfg.CraftyServerID, true
 }
 func (p *Proxy) handleConnection(client net.Conn) {
 	defer client.Close()
@@ -268,7 +272,14 @@ func (p *Proxy) handleLogin(client net.Conn, hs *mcproto.Handshake, hsRaw, lsRaw
 	}
 
 	hostname := hs.ServerAddress
-	backend, craftyID := p.resolveServer(hostname)
+	backend, craftyID, found := p.resolveServer(hostname)
+
+	// If hostname not recognized, show friendly error MOTD.
+	if !found {
+		p.state.Logf("MC: unknown hostname %s from %s", hostname, client.RemoteAddr())
+		p.kickClient(client, "Unknown server: "+hostname+"\n\nThis proxy does not recognize this hostname.")
+		return
+	}
 
 	// If this specific backend is already online, proxy transparently.
 	if p.state.IsOnline(hostname) {
