@@ -47,6 +47,9 @@ type Config struct {
 
 	// Cooldown in minutes before giving up on a wake attempt.
 	CoolDownMinutes int
+
+	// Auto-shutdown idle servers after this many minutes of 0 players. 0 = disabled.
+	AutoShutdownMinutes int
 }
 
 // LoadConfig reads configuration from environment variables.
@@ -73,7 +76,8 @@ func LoadConfig() (*Config, error) {
 		CraftyServerID:     os.Getenv("CRAFTY_SERVER_ID"),
 		WOLMAC:             os.Getenv("WOL_MAC"),
 		WOLBroadcast:       os.Getenv("WOL_BROADCAST"),
-		CoolDownMinutes:    getEnvInt("COOLDOWN_MINUTES", 5),
+		CoolDownMinutes:      getEnvInt("COOLDOWN_MINUTES", 5),
+		AutoShutdownMinutes:  getEnvInt("AUTO_SHUTDOWN_MINUTES", 0),
 	}
 
 	// Try loading multi-server config.

@@ -91,6 +91,9 @@ type State struct {
 	lang   string
 	health HealthResult
 
+	// Server icon base64-encoded PNG (for MOTD).
+	iconBase64 string
+
 	// Server config list (for dashboard / API).
 	serverEntries []ServerEntry
 }
@@ -279,6 +282,20 @@ func (s *State) ServerEntries() []ServerEntry {
 	out := make([]ServerEntry, len(s.serverEntries))
 	copy(out, s.serverEntries)
 	return out
+}
+
+// SetIcon stores a base64-encoded PNG for the server list MOTD.
+func (s *State) SetIcon(b64 string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.iconBase64 = b64
+}
+
+// Icon returns the stored server icon.
+func (s *State) Icon() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.iconBase64
 }
 
 // UpdatePlayers updates the player list from a Crafty or external source.

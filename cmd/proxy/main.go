@@ -7,6 +7,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 
@@ -68,11 +69,41 @@ func main() {
 		state.Logf("PROXY: single-server mode (%s)", cfg.BackendTarget)
 	}
 
+	// Load server icon if present.
+	if iconData, err := os.ReadFile("server-icon.png"); err == nil {
+		state.SetIcon(base64.StdEncoding.EncodeToString(iconData))
+		state.Logf("PROXY: loaded server-icon.png (%d bytes)", len(iconData))
+	}
+
+	// Crafty discover callback.
+	discoverServers := func() ([]proxy.DiscoveredServer, error) {
+		list, err := cmClient.ListServers()
+		if err != nil {
+			return nil, err
+		}
+		var out []proxy.DiscoveredServer
+		for _, s := range list {
+			cfg, err := cmClient.GetServerConfig(s.ID)
+			if err != nil {
+				continue
+			}
+			out = append(out, proxy.DiscoveredServer{
+				ID:   s.ID,
+				Name: cfg.Name,
+				IP:   cfg.IP,
+				Port: cfg.Port,
+			})
+		}
+		return out, nil
+	}
+
 	// Start dashboard in background.
-	go web.Start(state, cfg.WebPort, cfg.ServersPath, p.ReloadServers)
+	go web.Start(state, cfg.WebPort, cfg.ServersPath, p.ReloadServers, cmClient.StopServer, cmClient.RestartServer, discoverServers)
 
 	// Start backend health monitor.
 	p.StartMonitor()
+	// Start auto-shutdown (if configured).
+	p.StartAutoShutdown()
 
 	// Run the proxy (blocks).
 	state.Logf("PROXY: starting Minecraft listener on %s", cfg.MCPort)

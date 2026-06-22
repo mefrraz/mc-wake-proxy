@@ -55,6 +55,14 @@ type ServerInfo struct {
 	Desc      string `json:"desc"`
 }
 
+// ServerConfigInfo holds static server configuration from Crafty.
+type ServerConfigInfo struct {
+	ID       string `json:"server_id"`
+	Name     string `json:"server_name"`
+	IP       string `json:"server_ip"`
+	Port     int    `json:"server_port"`
+}
+
 // GetServerStatus returns runtime status for a specific server by its Crafty server_id.
 func (c *Client) GetServerStatus(serverID string) (*ServerInfo, error) {
 	var servers []ServerInfo
@@ -73,6 +81,36 @@ func (c *Client) GetServerStatus(serverID string) (*ServerInfo, error) {
 func (c *Client) StartServer(serverID string) error {
 	path := fmt.Sprintf("/servers/%s/action/start_server", serverID)
 	return c.post(path, nil)
+}
+
+// StopServer stops a Minecraft server by its Crafty server_id.
+func (c *Client) StopServer(serverID string) error {
+	path := fmt.Sprintf("/servers/%s/action/stop_server", serverID)
+	return c.post(path, nil)
+}
+
+// RestartServer restarts a Minecraft server by its Crafty server_id.
+func (c *Client) RestartServer(serverID string) error {
+	path := fmt.Sprintf("/servers/%s/action/restart_server", serverID)
+	return c.post(path, nil)
+}
+
+// ListServers returns all servers visible via the status endpoint.
+func (c *Client) ListServers() ([]ServerInfo, error) {
+	var servers []ServerInfo
+	if err := c.get("/servers/status/", &servers); err != nil {
+		return nil, err
+	}
+	return servers, nil
+}
+
+// GetServerConfig returns the static configuration for a server.
+func (c *Client) GetServerConfig(serverID string) (*ServerConfigInfo, error) {
+	var cfg ServerConfigInfo
+	if err := c.get("/servers/"+serverID, &cfg); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
 }
 
 // get performs a GET request and decodes the Crafty JSON envelope.
@@ -145,4 +183,6 @@ var _ ServerManager = (*Client)(nil)
 type ServerManager interface {
 	GetServerStatus(serverID string) (*ServerInfo, error)
 	StartServer(serverID string) error
+	StopServer(serverID string) error
+	RestartServer(serverID string) error
 }

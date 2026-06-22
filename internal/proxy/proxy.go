@@ -13,7 +13,7 @@ import (
 )
 
 // JSON templates for Minecraft status responses.
-const statusJSON = `{"version":{"name":"mc-wake-proxy","protocol":%d},"players":{"max":%d,"online":%d},"description":{"text":"%s"}}`
+const statusJSON = `{"version":{"name":"mc-wake-proxy","protocol":%d},"players":{"max":%d,"online":%d},"description":{"text":"%s"}%s}`
 
 // Proxy orchestrates the wake-on-demand lifecycle and transparent TCP forwarding.
 type Proxy struct {
@@ -122,6 +122,60 @@ func (p *Proxy) ReloadServers(path string) error {
 // ConfigPath returns the servers config path.
 func (p *Proxy) ConfigPath() string { return p.cfg.ServersPath }
 
+// StartAutoShutdown runs a background loop that stops idle servers.
+// If AUTO_SHUTDOWN_MINUTES > 0 and a server has 0 players for that duration,
+// the server is stopped via Crafty.
+func (p *Proxy) StartAutoShutdown() {
+	interval := time.Duration(p.cfg.AutoShutdownMinutes) * time.Minute
+	if interval <= 0 {
+		return
+	}
+	p.state.Logf("AUTO-SHUTDOWN: enabled (%d min idle timeout)", p.cfg.AutoShutdownMinutes)
+
+	// Track how long each server has been empty.
+	idleSince := make(map[string]time.Time)
+
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			checkServer := func(hostname, craftyID string) {
+				info, err := p.crafty.GetServerStatus(craftyID)
+				if err != nil || !info.Running {
+					delete(idleSince, hostname)
+					return
+				}
+				if info.Online > 0 {
+					delete(idleSince, hostname)
+					return
+				}
+				// Zero players — start or continue tracking.
+				if since, ok := idleSince[hostname]; ok {
+					if time.Since(since) >= interval {
+						p.state.Logf("AUTO-SHUTDOWN: %s idle for %v — stopping", hostname, time.Since(since).Round(time.Minute))
+						if err := p.crafty.StopServer(craftyID); err != nil {
+							p.state.Logf("AUTO-SHUTDOWN: stop %s failed: %v", hostname, err)
+						} else {
+							p.state.SetOffline(hostname)
+							delete(idleSince, hostname)
+						}
+					}
+				} else {
+					idleSince[hostname] = time.Now()
+				}
+			}
+
+			if p.cfg.Servers != nil {
+				for _, srv := range p.cfg.Servers.Servers {
+					checkServer(srv.Hostname, srv.CraftyServerID)
+				}
+			} else {
+				checkServer("", p.cfg.CraftyServerID)
+			}
+		}
+	}()
+}
+
 // resolveServer returns the backend and crafty_server_id for a hostname.
 // In multi-server mode, looks up the server entry. Falls back to global config.
 func (p *Proxy) resolveServer(hostname string) (backend, craftyServerID string) {
@@ -185,7 +239,12 @@ func (p *Proxy) handleStatus(client net.Conn, hs *mcproto.Handshake) {
 	}
 
 	st := p.state.Status()
-	jsonResp := fmt.Sprintf(statusJSON, hs.ProtocolVersion, st.MaxPlayers, st.Players, escapeJSON(motd))
+	// Build icon JSON fragment if available.
+	iconJSON := ""
+	if icon := p.state.Icon(); icon != "" {
+		iconJSON = fmt.Sprintf(`,"favicon":"data:image/png;base64,%s"`, icon)
+	}
+	jsonResp := fmt.Sprintf(statusJSON, hs.ProtocolVersion, st.MaxPlayers, st.Players, escapeJSON(motd), iconJSON)
 	_, _ = client.Write(mcproto.StatusResponse(jsonResp))
 
 	_, _ = mcproto.ReadVarInt(client)

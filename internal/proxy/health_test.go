@@ -16,7 +16,9 @@ func (m *mockPM) StartLXC(node, lxcID string) (string, error)                   
 type mockCM struct{ info *crafty.ServerInfo; err error }
 
 func (m *mockCM) GetServerStatus(serverID string) (*crafty.ServerInfo, error) { return m.info, m.err }
-func (m *mockCM) StartServer(serverID string) error                           { return m.err }
+func (m *mockCM) StartServer(serverID string) error                            { return m.err }
+func (m *mockCM) StopServer(serverID string) error                             { return m.err }
+func (m *mockCM) RestartServer(serverID string) error                          { return m.err }
 
 func TestHealthCheckAllOK(t *testing.T) {
 	cfg := &Config{

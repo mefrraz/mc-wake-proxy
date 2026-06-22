@@ -171,6 +171,10 @@
                 </div>
                 <div id="add-error" style="color:var(--red);font-size:12px;margin-top:6px;display:none;"></div>
             </div>
+            <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px;">
+                <button onclick="discoverServers()" style="background:var(--accent);color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-weight:600;font-size:12px;">🔍 Discover from Crafty</button>
+                <div id="discover-list" style="margin-top:10px;"></div>
+            </div>
         </div>
 
         <div class="card">
@@ -298,7 +302,12 @@
                             html += '<td style="padding:8px 4px;font-family:var(--mono);font-size:13px;">' + s.hostname + '</td>';
                             html += '<td style="padding:8px 4px;font-family:var(--mono);font-size:13px;color:var(--text-dim);">' + s.backend + '</td>';
                             html += '<td style="padding:8px 4px;text-align:right;color:' + color + ';font-weight:600;font-size:12px;">' + dot + ' ' + status + '</td>';
-                            html += '<td style="text-align:right;"><button onclick="removeServer(\'' + s.hostname + '\')" style="background:none;border:1px solid var(--red);color:var(--red);border-radius:4px;cursor:pointer;font-size:11px;padding:2px 6px;">✕</button></td>';
+                            html += '<td style="text-align:right;"><button onclick="removeServer(\'' + s.hostname + '\')" style="background:none;border:1px solid var(--red);color:var(--red);border-radius:4px;cursor:pointer;font-size:11px;padding:2px 6px;">✕</button>';
+                            if (s.online) {
+                                html += ' <button onclick="serverAction(\'stop\',\'' + s.hostname + '\')" style="background:none;border:1px solid var(--orange);color:var(--orange);border-radius:4px;cursor:pointer;font-size:11px;padding:2px 6px;margin-left:4px;">⏹</button>';
+                                html += ' <button onclick="serverAction(\'restart\',\'' + s.hostname + '\')" style="background:none;border:1px solid var(--accent);color:var(--accent);border-radius:4px;cursor:pointer;font-size:11px;padding:2px 6px;margin-left:2px;">↻</button>';
+                            }
+                            html += '</td>';
                             html += '</tr>';
                         });
                     }
@@ -349,6 +358,64 @@
                     else updateServers();
                 })
                 .catch(() => {});
+        }
+
+        function serverAction(action, hostname) {
+            var label = action === 'stop' ? 'Stop' : 'Restart';
+            if (!confirm(label + ' server "' + hostname + '"?')) return;
+            fetch('/api/action/' + action + '?hostname=' + encodeURIComponent(hostname), { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.error) alert(data.error);
+                    else updateServers();
+                })
+                .catch(function() {});
+        }
+
+        function discoverServers() {
+            var list = document.getElementById('discover-list');
+            list.innerHTML = '<span style="color:var(--text-dim);">Searching Crafty...</span>';
+            fetch('/api/crafty/servers')
+                .then(r => r.json())
+                .then(servers => {
+                    if (servers.error) {
+                        list.innerHTML = '<span style="color:var(--red);">' + servers.error + '</span>';
+                        return;
+                    }
+                    if (!servers || servers.length === 0) {
+                        list.innerHTML = '<span style="color:var(--text-dim);">No servers found. Ensure "Show Status" is ON in Crafty.</span>';
+                        return;
+                    }
+                    var html = '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+                    servers.forEach(function(s) {
+                        html += '<tr style="border-bottom:1px solid var(--border);">';
+                        html += '<td style="padding:6px 4px;font-weight:600;">' + s.name + '</td>';
+                        html += '<td style="padding:6px 4px;color:var(--text-dim);font-family:var(--mono);">' + s.ip + ':' + s.port + '</td>';
+                        html += '<td style="padding:6px 4px;text-align:right;"><button onclick="importServer(\'' + s.id + '\',\'' + s.name + '\',\'' + s.ip + '\',' + s.port + ')" style="background:var(--green);color:#fff;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px;">+ Import</button></td>';
+                        html += '</tr>';
+                    });
+                    html += '</table>';
+                    list.innerHTML = html;
+                })
+                .catch(function() {
+                    list.innerHTML = '<span style="color:var(--red);">Failed to connect to Crafty.</span>';
+                });
+        }
+
+        function importServer(id, name, ip, port) {
+            var hostname = prompt('Hostname for this server:', name.toLowerCase().replace(/\s+/g, '-') + '.mc.example.com');
+            if (!hostname) return;
+            fetch('/api/servers', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ hostname: hostname, backend: ip + ':' + port, crafty_server_id: id })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.error) alert(data.error);
+                else updateServers();
+            })
+            .catch(function() {});
         }
 
         setInterval(update, 2000);

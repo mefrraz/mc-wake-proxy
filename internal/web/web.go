@@ -14,7 +14,8 @@ var dashboardHTML embed.FS
 
 // Start launches the HTTP dashboard server with server management API.
 // reloadServers is called after adding/removing a server to update routing at runtime.
-func Start(state *proxy.State, addr, configPath string, reloadServers func(string) error) {
+// stopServer/restartServer are Crafty action callbacks.
+func Start(state *proxy.State, addr, configPath string, reloadServers func(string) error, stopServer, restartServer func(string) error, listServers func() ([]proxy.DiscoveredServer, error)) {
 	mux := http.NewServeMux()
 
 	// Dashboard page.
@@ -121,6 +122,82 @@ func Start(state *proxy.State, addr, configPath string, reloadServers func(strin
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
+	})
+
+	// API: server actions (stop, restart).
+	mux.HandleFunc("/api/action/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != "POST" {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		hostname := r.URL.Query().Get("hostname")
+		action := r.URL.Path[len("/api/action/"):]
+		if hostname == "" || action == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "?hostname= is required"})
+			return
+		}
+
+		// Resolve Crafty server ID from config (case-insensitive).
+		entries := state.ServerEntries()
+		var craftyID string
+		hLower := []byte(hostname)
+		for i := range hLower {
+			if hLower[i] >= 'A' && hLower[i] <= 'Z' {
+				hLower[i] += 32
+			}
+		}
+		for _, e := range entries {
+			b := []byte(e.Hostname)
+			for i := range b {
+				if b[i] >= 'A' && b[i] <= 'Z' {
+					b[i] += 32
+				}
+			}
+			if string(hLower) == string(b) {
+				craftyID = e.CraftyServerID
+				break
+			}
+		}
+		if craftyID == "" {
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(map[string]string{"error": "server not found"})
+			return
+		}
+
+		var err error
+		switch action {
+		case "stop":
+			err = stopServer(craftyID)
+		case "restart":
+			err = restartServer(craftyID)
+		default:
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "unknown action"})
+			return
+		}
+
+		if err != nil {
+			state.Logf("WEB: action %s on %s failed: %v", action, hostname, err)
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+		state.Logf("WEB: %s %s via Crafty", action, hostname)
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	})
+
+	// API: discover servers from Crafty.
+	mux.HandleFunc("/api/crafty/servers", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		servers, err := listServers()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+		json.NewEncoder(w).Encode(servers)
 	})
 
 	state.Logf("WEB: dashboard listening on %s", addr)

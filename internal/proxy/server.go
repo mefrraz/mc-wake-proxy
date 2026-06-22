@@ -14,6 +14,14 @@ type ServerEntry struct {
 	CraftyServerID  string `yaml:"crafty_server_id" json:"crafty_server_id"` // Crafty UUID
 }
 
+// DiscoveredServer is a server found via Crafty API for the Discover feature.
+type DiscoveredServer struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	IP   string `json:"ip"`
+	Port int    `json:"port"`
+}
+
 // ServersConfig is the root of servers.yml.
 type ServersConfig struct {
 	Servers []ServerEntry `yaml:"servers" json:"servers"`
