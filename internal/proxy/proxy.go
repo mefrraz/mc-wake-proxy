@@ -60,31 +60,44 @@ func (p *Proxy) Start() error {
 // updated so the next player triggers a wake sequence.
 func (p *Proxy) StartMonitor() {
 	go func() {
+		offlineLogged := make(map[string]bool)
 		for {
 			time.Sleep(5 * time.Second)
-			if !p.state.IsOnline("") && !p.state.HasAnyOnline() {
-				continue
-			}
-			// Check global backend in single-server mode, or all backends in multi mode.
 			if p.cfg.Servers != nil {
 				for _, srv := range p.cfg.Servers.Servers {
-					if p.state.IsOnline(srv.Hostname) {
-						conn, err := net.DialTimeout("tcp", srv.Backend, 2*time.Second)
-						if err != nil {
+					conn, err := net.DialTimeout("tcp", srv.Backend, 2*time.Second)
+					if err != nil {
+						if p.state.IsOnline(srv.Hostname) {
 							p.state.SetOffline(srv.Hostname)
-							p.state.Logf("MONITOR: %s (%s) went offline", srv.Hostname, srv.Backend)
-						} else {
-							conn.Close()
+						}
+						if !offlineLogged[srv.Hostname] {
+							p.state.Logf("MONITOR: %s (%s) is offline", srv.Hostname, srv.Backend)
+							offlineLogged[srv.Hostname] = true
+						}
+					} else {
+						conn.Close()
+						if offlineLogged[srv.Hostname] {
+							p.state.Logf("MONITOR: %s (%s) is back online", srv.Hostname, srv.Backend)
+							offlineLogged[srv.Hostname] = false
 						}
 					}
 				}
 			} else {
 				conn, err := net.DialTimeout("tcp", p.cfg.BackendTarget, 2*time.Second)
 				if err != nil {
-					p.state.SetOfflineGlobally()
-					p.state.Logf("MONITOR: backend %s went offline", p.cfg.BackendTarget)
+					if p.state.IsOnline("") {
+						p.state.SetOfflineGlobally()
+					}
+					if !offlineLogged[""] {
+						p.state.Logf("MONITOR: backend %s went offline", p.cfg.BackendTarget)
+						offlineLogged[""] = true
+					}
 				} else {
 					conn.Close()
+					if offlineLogged[""] {
+						p.state.Logf("MONITOR: backend %s is back online", p.cfg.BackendTarget)
+						offlineLogged[""] = false
+					}
 				}
 			}
 		}

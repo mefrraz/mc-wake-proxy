@@ -83,14 +83,18 @@ func main() {
 		}
 		var out []proxy.DiscoveredServer
 		for _, s := range list {
-			cfg, err := cmClient.GetServerConfig(s.ID)
+			srvCfg, err := cmClient.GetServerConfig(s.ID)
 			ip := ""
 			port := 25565
 			name := s.WorldName
-			if err == nil && cfg != nil {
-				if cfg.IP != "" { ip = cfg.IP }
-				if cfg.Port != 0 { port = cfg.Port }
-				if cfg.Name != "" { name = cfg.Name }
+			if err == nil && srvCfg != nil {
+				ip = srvCfg.IP
+				if srvCfg.Port != 0 { port = srvCfg.Port }
+				if srvCfg.Name != "" { name = srvCfg.Name }
+			}
+			// Crafty often reports 127.0.0.1 — use the LXC's real IP instead.
+			if ip == "" || ip == "127.0.0.1" || ip == "0.0.0.0" {
+				ip = cfg.CraftyHost
 			}
 			out = append(out, proxy.DiscoveredServer{
 				ID:      s.ID,
