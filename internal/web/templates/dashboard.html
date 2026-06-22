@@ -1,427 +1,427 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>mc-wake-proxy</title>
-    <style>
-        :root {
-            --bg: #0f1419;
-            --surface: #1a1f2b;
-            --border: #2a3140;
-            --text: #e2e6ed;
-            --text-dim: #8892a0;
-            --accent: #4f8cff;
-            --green: #2ecc71;
-            --orange: #f39c12;
-            --red: #e74c3c;
-            --radius: 10px;
-            --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            --mono: ui-monospace, "SF Mono", Consolas, "Liberation Mono", monospace;
-        }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: var(--font);
-            background: var(--bg);
-            color: var(--text);
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-        .container {
-            width: 100%;
-            max-width: 700px;
-            padding: 32px 20px;
-        }
-        .header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 28px;
-        }
-        .header h1 {
-            font-size: 20px;
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .phase-dot {
-            width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0;
-        }
-        .card {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 20px 22px;
-            margin-bottom: 16px;
-        }
-        .card h2 {
-            font-size: 15px;
-            font-weight: 600;
-            margin-bottom: 12px;
-        }
-        .row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 8px 0;
-            border-bottom: 1px solid var(--border);
-        }
-        .row:last-child { border-bottom: none; }
-        .row .label { color: var(--text-dim); font-size: 13px; }
-        .row .value { font-family: var(--mono); font-size: 13px; font-weight: 600; }
-        .phase-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 5px 12px;
-            border-radius: 20px;
-            font-weight: 600;
-            font-size: 12px;
-        }
-        .logs {
-            background: #0a0d13;
-            color: #8fe3a8;
-            font-family: var(--mono);
-            padding: 14px 16px;
-            height: 300px;
-            overflow-y: auto;
-            border-radius: 6px;
-            font-size: 12px;
-            line-height: 1.7;
-            white-space: pre-wrap;
-            word-break: break-all;
-        }
-        .logs::-webkit-scrollbar { width: 6px; }
-        .logs::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-        .refresh {
-            font-size: 11px;
-            color: var(--text-dim);
-            text-align: center;
-            margin-top: 20px;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mc-wake-proxy</title>
+<style>
+:root {
+    --bg: #0f1419; --surface: #1a1f2b; --border: #2a3140;
+    --text: #e2e6ed; --text-dim: #8892a0; --accent: #4f8cff;
+    --green: #2ecc71; --orange: #f39c12; --red: #e74c3c; --radius: 10px;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "SF Mono", Consolas, monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; }
+nav {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    display: flex; gap: 4px; padding: 0 20px; height: 56px; align-items: center;
+    position: sticky; top: 0; z-index: 10;
+}
+nav .logo { font-weight: 700; font-size: 16px; margin-right: 24px; display: flex; align-items: center; gap: 8px; }
+nav .logo .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--green); }
+nav button {
+    background: none; border: none; padding: 10px 16px; font-size: 14px;
+    color: var(--text-dim); cursor: pointer; border-radius: 8px; font-weight: 500;
+}
+nav button:hover { background: var(--bg); color: var(--text); }
+nav button.active { background: rgba(79,140,255,0.12); color: var(--accent); }
+main { max-width: 900px; margin: 0 auto; padding: 28px 20px 60px; }
+.tab { display: none; }
+.tab.active { display: block; }
+.card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px 22px; margin-bottom: 16px;
+}
+.card h2 { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
+.card h3 { font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text-dim); }
+.row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--border); }
+.row:last-child { border-bottom: none; }
+.row .label { color: var(--text-dim); font-size: 13px; }
+.row .value { font-family: var(--mono); font-size: 13px; font-weight: 600; }
+.badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px; border-radius: 20px; font-weight: 600; font-size: 12px;
+}
+.logs {
+    background: #0a0d13; color: #8fe3a8; font-family: var(--mono);
+    padding: 14px 16px; height: 340px; overflow-y: auto; border-radius: 6px;
+    font-size: 12px; line-height: 1.7; white-space: pre-wrap; word-break: break-all;
+}
+.logs::-webkit-scrollbar { width: 6px; }
+.logs::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+.btn {
+    padding: 8px 14px; border: none; border-radius: 6px; cursor: pointer;
+    font-weight: 600; font-size: 12px; transition: opacity .15s;
+}
+.btn:hover { opacity: 0.85; }
+.btn-green { background: var(--green); color: #fff; }
+.btn-red { background: var(--red); color: #fff; }
+.btn-orange { background: var(--orange); color: #fff; }
+.btn-accent { background: var(--accent); color: #fff; }
+.btn-ghost { background: none; border: 1px solid var(--border); color: var(--text); }
+.btn-sm { padding: 4px 10px; font-size: 11px; }
+input, select {
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    padding: 8px 10px; border-radius: 6px; font-size: 12px; font-family: var(--mono);
+}
+input:focus { outline: 2px solid rgba(79,140,255,0.3); border-color: var(--accent); }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 8px 6px; text-align: left; font-size: 13px; border-bottom: 1px solid var(--border); }
+th { color: var(--text-dim); font-weight: 500; font-size: 11px; text-transform: uppercase; }
+.server-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.server-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px; cursor: pointer; transition: border-color .2s;
+}
+.server-card:hover { border-color: var(--accent); }
+.server-card .host { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+.server-card .addr { font-family: var(--mono); font-size: 12px; color: var(--text-dim); margin-bottom: 10px; }
+.server-card .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.health-dots { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; margin-bottom: 10px; }
+.health-dots span { display: flex; align-items: center; gap: 4px; }
+.empty { text-align: center; color: var(--text-dim); padding: 24px 0; font-size: 13px; }
+.toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+</style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>
-                <span class="phase-dot" id="dot"></span>
-                mc-wake-proxy
-            </h1>
-            <span class="phase-badge" id="badge">Loading...</span>
-        </div>
 
+<nav>
+    <div class="logo"><span class="dot" id="nav-dot"></span>mc-wake-proxy</div>
+    <button class="active" data-tab="dash">Dashboard</button>
+    <button data-tab="servers">Servers</button>
+    <button data-tab="logs">Logs</button>
+    <button data-tab="settings">Settings</button>
+</nav>
+
+<main>
+    <!-- DASHBOARD -->
+    <div class="tab active" id="tab-dash">
         <div class="card">
-            <h2>Server Status</h2>
-            <div class="row">
-                <span class="label">Phase</span>
-                <span class="value" id="phase-text">—</span>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+                <h2 style="margin:0;">Status</h2>
+                <span class="badge" id="phase-badge">Loading...</span>
             </div>
-            <div class="row">
-                <span class="label">Elapsed</span>
-                <span class="value" id="elapsed">00:00</span>
-            </div>
-            <div class="row">
-                <span class="label">Address</span>
-                <span class="value" id="addr">—</span>
-            </div>
-            <div class="row">
-                <span class="label">Players</span>
-                <span class="value" id="players">0 / 0</span>
-            </div>
-            <div class="row">
-                <span class="label">World Seed</span>
-                <span class="value" id="seed">N/A</span>
-            </div>
+            <div class="row"><span class="label">Phase</span><span class="value" id="phase-text">—</span></div>
+            <div class="row"><span class="label">Elapsed</span><span class="value" id="elapsed">—</span></div>
+            <div class="row"><span class="label">Players</span><span class="value" id="players">—</span></div>
         </div>
-
-        <div class="card" id="health-card">
+        <div class="card">
             <h2>Connections</h2>
-            <div id="health-checks" style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;">
-                <span id="hc-proxmox">⏳ Proxmox</span>
-                <span id="hc-crafty">⏳ Crafty</span>
-                <span id="hc-wol">⏳ WOL</span>
-                <span id="hc-backend">⏳ Backend</span>
-            </div>
+            <div class="health-dots" id="health-dots"></div>
         </div>
-
-        <div class="card" id="servers-card" style="display:none;">
-            <h2>Servers</h2>
-            <table style="width:100%;border-collapse:collapse;margin-bottom:16px;">
-                <thead>
-                    <tr style="color:var(--text-dim);font-size:11px;text-transform:uppercase;">
-                        <th style="text-align:left;padding:8px 4px;">Hostname</th>
-                        <th style="text-align:left;padding:8px 4px;">Backend</th>
-                        <th style="text-align:right;padding:8px 4px;">Status</th>
-                        <th style="width:30px;"></th>
-                    </tr>
-                </thead>
-                <tbody id="servers-tbody"></tbody>
-            </table>
-            <div style="border-top:1px solid var(--border);padding-top:14px;">
-                <h3 style="font-size:13px;margin-bottom:10px;">Add Server</h3>
-                <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                    <input type="text" id="add-hostname" placeholder="Hostname (e.g. survival.mc.example.com)" style="flex:1;min-width:180px;background:var(--bg);color:var(--text);border:1px solid var(--border);padding:8px 10px;border-radius:6px;font-size:12px;">
-                    <input type="text" id="add-backend" placeholder="Backend (IP:port)" style="flex:1;min-width:130px;background:var(--bg);color:var(--text);border:1px solid var(--border);padding:8px 10px;border-radius:6px;font-size:12px;">
-                    <input type="text" id="add-serverid" placeholder="Crafty Server ID" style="flex:1;min-width:180px;background:var(--bg);color:var(--text);border:1px solid var(--border);padding:8px 10px;border-radius:6px;font-size:12px;">
-                    <button onclick="addServer()" style="background:var(--green);color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-weight:600;font-size:12px;">Add</button>
-                </div>
-                <div id="add-error" style="color:var(--red);font-size:12px;margin-top:6px;display:none;"></div>
-            </div>
-            <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px;">
-                <button onclick="discoverServers()" style="background:var(--accent);color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-weight:600;font-size:12px;">🔍 Discover from Crafty</button>
-                <div id="discover-list" style="margin-top:10px;"></div>
-            </div>
-        </div>
-
         <div class="card">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-                <h2 style="margin-bottom:0;">Event Log</h2>
-                <button onclick="copyLogs()" style="background:var(--surface);color:var(--accent);border:1px solid var(--border);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;">📋 Copy</button>
-            </div>
-            <div class="logs" id="logs">Loading...</div>
+            <h2>All Servers</h2>
+            <div class="server-grid" id="server-cards"></div>
+            <div class="empty" id="no-servers" style="display:none;">No servers configured. Go to <b>Settings</b> to add one.</div>
         </div>
-
-        <div class="refresh">Auto-refreshes every 2 seconds</div>
     </div>
 
-    <script>
-        const PHASE_LABELS = {
-            'idle':        { label: 'Idle',        color: '#8892a0', dot: '#8892a0' },
-            'waking_host': { label: 'Waking Host', color: '#f39c12', dot: '#f39c12' },
-            'waiting_lxc': { label: 'Waiting LXC', color: '#f39c12', dot: '#f39c12' },
-            'starting_mc': { label: 'Starting MC', color: '#f39c12', dot: '#f39c12' },
-            'ready':       { label: 'Ready',       color: '#2ecc71', dot: '#2ecc71' },
-        };
+    <!-- SERVERS (detail) -->
+    <div class="tab" id="tab-servers">
+        <div class="toolbar">
+            <button class="btn btn-ghost btn-sm" onclick="switchTab('dash')">← Back</button>
+            <span id="server-detail-title" style="font-weight:600;"></span>
+            <span></span>
+        </div>
+        <div class="card">
+            <h2>Info</h2>
+            <div class="row"><span class="label">Hostname</span><span class="value" id="sd-hostname">—</span></div>
+            <div class="row"><span class="label">Backend</span><span class="value" id="sd-backend">—</span></div>
+            <div class="row"><span class="label">Crafty ID</span><span class="value" id="sd-crafty">—</span></div>
+            <div class="row"><span class="label">Status</span><span class="value" id="sd-status">—</span></div>
+        </div>
+        <div class="card">
+            <h2>Actions</h2>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;" id="sd-actions"></div>
+        </div>
+    </div>
 
-        function update() {
-            fetch('/api/status')
-                .then(r => r.json())
-                .then(data => {
-                    const phase = data.phase || 'idle';
-                    const info = PHASE_LABELS[phase] || PHASE_LABELS['idle'];
+    <!-- LOGS -->
+    <div class="tab" id="tab-logs">
+        <div class="card">
+            <div class="toolbar">
+                <h2 style="margin:0;">Event Log</h2>
+                <button class="btn btn-accent btn-sm" onclick="copyLogs()">📋 Copy</button>
+            </div>
+            <div class="logs" id="logs-box">Loading...</div>
+        </div>
+    </div>
 
-                    document.getElementById('dot').style.background = info.dot;
-                    document.getElementById('badge').textContent = info.label;
-                    document.getElementById('badge').style.background = info.color + '22';
-                    document.getElementById('badge').style.color = info.color;
-                    document.getElementById('phase-text').textContent = info.label;
+    <!-- SETTINGS -->
+    <div class="tab" id="tab-settings">
+        <div class="card">
+            <h2>Add Server</h2>
+            <div style="display:grid;gap:10px;grid-template-columns:1fr 1fr;">
+                <input type="text" id="add-hostname" placeholder="Hostname">
+                <input type="text" id="add-backend" placeholder="Backend (IP:port)">
+                <input type="text" id="add-serverid" placeholder="Crafty Server ID" style="grid-column:span 2;">
+            </div>
+            <button class="btn btn-green" onclick="addServer()" style="margin-top:12px;">Add Server</button>
+            <span id="add-error" style="color:var(--red);font-size:12px;margin-left:12px;display:none;"></span>
+        </div>
+        <div class="card">
+            <h2>Discover from Crafty</h2>
+            <p style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">Finds all servers in your Crafty Controller with "Show Status" enabled.</p>
+            <button class="btn btn-accent" onclick="discoverServers()">🔍 Discover</button>
+            <div id="discover-list" style="margin-top:12px;"></div>
+        </div>
+        <div class="card">
+            <h2>Manage Servers</h2>
+            <table>
+                <thead><tr><th>Hostname</th><th>Backend</th><th>Status</th><th></th></tr></thead>
+                <tbody id="settings-server-list"></tbody>
+            </table>
+            <div class="empty" id="settings-no-servers" style="display:none;">No servers yet.</div>
+        </div>
+    </div>
+</main>
 
-                    const since = new Date(data.phase_since);
-                    const elapsed = Math.floor((Date.now() - since.getTime()) / 1000);
-                    const min = Math.floor(elapsed / 60).toString().padStart(2, '0');
-                    const sec = (elapsed % 60).toString().padStart(2, '0');
-                    document.getElementById('elapsed').textContent = min + ':' + sec;
+<script>
+const PHASES = {
+    'idle':        { label: 'Idle',        color: '#8892a0', dot: '#8892a0' },
+    'waking_host': { label: 'Waking Host', color: '#f39c12', dot: '#f39c12' },
+    'waiting_lxc': { label: 'Waiting LXC', color: '#f39c12', dot: '#f39c12' },
+    'starting_mc': { label: 'Starting MC', color: '#f39c12', dot: '#f39c12' },
+    'ready':       { label: 'Ready',       color: '#2ecc71', dot: '#2ecc71' },
+};
 
-                    document.getElementById('addr').textContent = data.server_online
-                        ? (window.location.hostname + ':25565')
-                        : '— (offline)';
+let currentTab = 'dash';
+let currentServer = null;
 
-                    document.getElementById('players').textContent =
-                        data.players + ' / ' + data.max_players;
+// ---- Navigation ----
+document.querySelectorAll('nav button').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        switchTab(this.dataset.tab);
+    });
+});
 
-                    document.getElementById('seed').textContent = data.world_seed || 'N/A';
-                })
-                .catch(() => {});
+function switchTab(id) {
+    currentTab = id;
+    document.querySelectorAll('nav button').forEach(function(b) { b.classList.toggle('active', b.dataset.tab === id); });
+    document.querySelectorAll('.tab').forEach(function(t) { t.classList.toggle('active', t.id === 'tab-' + id); });
+    if (id === 'dash') updateDashboard();
+    if (id === 'servers' && currentServer) showServerDetail(currentServer);
+    if (id === 'logs') fetchLogs();
+    if (id === 'settings') updateSettings();
+}
 
-            fetch('/api/logs')
-                .then(r => r.json())
-                .then(logs => {
-                    const el = document.getElementById('logs');
-                    el.textContent = logs.join('\n');
-                    el.scrollTop = el.scrollHeight;
-                })
-                .catch(() => {});
+// ---- API helpers ----
+function api(url, opts) {
+    return fetch(url, opts).then(function(r) { return r.json(); });
+}
 
-            fetch('/api/health')
-                .then(r => r.json())
-                .then(data => {
-                    if (!data.checks) return;
-                    data.checks.forEach(function(c) {
-                        var id = 'hc-' + c.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-                        var el = document.getElementById(id);
-                        if (!el) return;
-                        var icon = c.ok ? '✅' : '❌';
-                        el.textContent = icon + ' ' + c.name;
-                        el.title = c.message || '';
-                        el.style.color = c.ok ? 'var(--green)' : 'var(--red)';
-                    });
-                })
-                .catch(() => {});
-        }
+// ---- DASHBOARD ----
+function updateDashboard() {
+    api('/api/status').then(function(data) {
+        var p = PHASES[data.phase] || PHASES['idle'];
+        document.getElementById('nav-dot').style.background = p.dot;
+        document.getElementById('phase-badge').textContent = p.label;
+        document.getElementById('phase-badge').style.background = p.color + '22';
+        document.getElementById('phase-badge').style.color = p.color;
+        document.getElementById('phase-text').textContent = p.label;
+        var s = new Date(data.phase_since);
+        var e = Math.floor((Date.now() - s.getTime()) / 1000);
+        document.getElementById('elapsed').textContent = String(Math.floor(e/60)).padStart(2,'0') + ':' + String(e%60).padStart(2,'0');
+        document.getElementById('players').textContent = data.players + ' / ' + data.max_players;
+    }).catch(function(){});
 
-        function copyLogs() {
-            const text = document.getElementById('logs').textContent;
-            const btn = event.target;
-            try {
-                // Try modern API first.
-                if (navigator.clipboard && navigator.clipboard.writeText) {
-                    navigator.clipboard.writeText(text).then(function() {
-                        btn.textContent = '✅ Copied!';
-                        setTimeout(function() { btn.textContent = '📋 Copy'; }, 1500);
-                    });
+    api('/api/health').then(function(h) {
+        var html = '';
+        (h.checks || []).forEach(function(c) {
+            html += '<span style="color:' + (c.ok ? 'var(--green)' : 'var(--red)') + '">' + (c.ok ? '✅' : '❌') + ' ' + c.name + '</span>';
+        });
+        document.getElementById('health-dots').innerHTML = html;
+    }).catch(function(){});
+
+    api('/api/servers').then(function(servers) {
+        var grid = document.getElementById('server-cards');
+        var empty = document.getElementById('no-servers');
+        if (!servers || servers.length === 0) {
+            grid.innerHTML = '';
+            empty.style.display = '';
+        } else {
+            empty.style.display = 'none';
+            var html = '';
+            servers.forEach(function(s) {
+                var dot = s.online ? '🟢' : '🔴';
+                html += '<div class="server-card" onclick="openServer(\'' + esc(s.hostname) + '\')">';
+                html += '<div class="host">' + dot + ' ' + esc(s.hostname) + '</div>';
+                html += '<div class="addr">' + esc(s.backend) + '</div>';
+                html += '<div class="actions">';
+                if (s.online) {
+                    html += '<button class="btn btn-red btn-sm" onclick="event.stopPropagation();serverAction(\'stop\',\'' + esc(s.hostname) + '\')">⏹ Stop</button>';
+                    html += '<button class="btn btn-orange btn-sm" onclick="event.stopPropagation();serverAction(\'restart\',\'' + esc(s.hostname) + '\')">↻ Restart</button>';
                 } else {
-                    // Fallback for HTTP (no clipboard API).
-                    var ta = document.createElement('textarea');
-                    ta.value = text;
-                    ta.style.position = 'fixed';
-                    ta.style.left = '-9999px';
-                    document.body.appendChild(ta);
-                    ta.select();
-                    document.execCommand('copy');
-                    document.body.removeChild(ta);
-                    btn.textContent = '✅ Copied!';
-                    setTimeout(function() { btn.textContent = '📋 Copy'; }, 1500);
+                    html += '<button class="btn btn-green btn-sm" onclick="event.stopPropagation();serverAction(\'start\',\'' + esc(s.hostname) + '\')">▶ Start</button>';
                 }
-            } catch(e) {
-                btn.textContent = '❌ Failed';
-                setTimeout(function() { btn.textContent = '📋 Copy'; }, 1500);
-            }
+                html += '</div></div>';
+            });
+            grid.innerHTML = html;
         }
+    }).catch(function(){});
+}
 
-        function updateServers() {
-            fetch('/api/servers')
-                .then(r => r.json())
-                .then(servers => {
-                    const card = document.getElementById('servers-card');
-                    const tbody = document.getElementById('servers-tbody');
-                    // Always show the card so users can add servers.
-                    card.style.display = '';
-                    let html = '';
-                    if (!servers || servers.length === 0) {
-                        html = '<tr><td colspan="4" style="padding:8px;color:var(--text-dim);font-size:12px;">No servers configured — add one below.</td></tr>';
-                    } else {
-                        servers.forEach(function(s) {
-                            const dot = s.online ? '🟢' : '🔴';
-                            const status = s.online ? 'Online' : 'Offline';
-                            const color = s.online ? 'var(--green)' : 'var(--red)';
-                            html += '<tr>';
-                            html += '<td style="padding:8px 4px;font-family:var(--mono);font-size:13px;">' + s.hostname + '</td>';
-                            html += '<td style="padding:8px 4px;font-family:var(--mono);font-size:13px;color:var(--text-dim);">' + s.backend + '</td>';
-                            html += '<td style="padding:8px 4px;text-align:right;color:' + color + ';font-weight:600;font-size:12px;">' + dot + ' ' + status + '</td>';
-                            html += '<td style="text-align:right;"><button onclick="removeServer(\'' + s.hostname + '\')" style="background:none;border:1px solid var(--red);color:var(--red);border-radius:4px;cursor:pointer;font-size:11px;padding:2px 6px;">✕</button>';
-                            if (s.online) {
-                                html += ' <button onclick="serverAction(\'stop\',\'' + s.hostname + '\')" style="background:none;border:1px solid var(--orange);color:var(--orange);border-radius:4px;cursor:pointer;font-size:11px;padding:2px 6px;margin-left:4px;">⏹</button>';
-                                html += ' <button onclick="serverAction(\'restart\',\'' + s.hostname + '\')" style="background:none;border:1px solid var(--accent);color:var(--accent);border-radius:4px;cursor:pointer;font-size:11px;padding:2px 6px;margin-left:2px;">↻</button>';
-                            }
-                            html += '</td>';
-                            html += '</tr>';
-                        });
-                    }
-                    tbody.innerHTML = html;
-                })
-                .catch(() => {});
+function openServer(hostname) {
+    currentServer = hostname;
+    switchTab('servers');
+}
+
+function showServerDetail(hostname) {
+    document.getElementById('server-detail-title').textContent = hostname;
+    api('/api/servers').then(function(servers) {
+        var s = null;
+        servers.forEach(function(x) { if (x.hostname === hostname) s = x; });
+        if (!s) return;
+        document.getElementById('sd-hostname').textContent = s.hostname;
+        document.getElementById('sd-backend').textContent = s.backend;
+        document.getElementById('sd-crafty').textContent = s.crafty_server_id || '—';
+        document.getElementById('sd-status').textContent = s.online ? '🟢 Online' : '🔴 Offline';
+        document.getElementById('sd-status').style.color = s.online ? 'var(--green)' : 'var(--red)';
+        var actions = document.getElementById('sd-actions');
+        if (s.online) {
+            actions.innerHTML = '<button class="btn btn-red" onclick="serverAction(\'stop\',\'' + esc(hostname) + '\')">⏹ Stop</button>' +
+                '<button class="btn btn-orange" onclick="serverAction(\'restart\',\'' + esc(hostname) + '\')">↻ Restart</button>';
+        } else {
+            actions.innerHTML = '<button class="btn btn-green" onclick="serverAction(\'start\',\'' + esc(hostname) + '\')">▶ Start Server</button>';
         }
+    });
+}
 
-        function addServer() {
-            const hostname = document.getElementById('add-hostname').value.trim();
-            const backend = document.getElementById('add-backend').value.trim();
-            const serverId = document.getElementById('add-serverid').value.trim();
-            const errEl = document.getElementById('add-error');
-            errEl.style.display = 'none';
-
-            if (!hostname || !backend || !serverId) {
-                errEl.textContent = 'All fields are required.';
-                errEl.style.display = '';
-                return;
-            }
-
-            fetch('/api/servers', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ hostname: hostname, backend: backend, crafty_server_id: serverId })
-            })
-            .then(r => r.json())
-            .then(data => {
-                if (data.error) {
-                    errEl.textContent = data.error;
-                    errEl.style.display = '';
-                } else {
-                    document.getElementById('add-hostname').value = '';
-                    document.getElementById('add-backend').value = '';
-                    document.getElementById('add-serverid').value = '';
-                    updateServers();
-                }
-            })
-            .catch(() => {});
+function serverAction(action, hostname) {
+    var labels = { stop: 'Stop', restart: 'Restart', start: 'Start' };
+    if (!confirm(labels[action] + ' "' + hostname + '"?')) return;
+    // For start, trigger via wake — just tell the user to connect via Minecraft.
+    // For stop/restart, use the action API.
+    api('/api/action/' + action + '?hostname=' + encodeURIComponent(hostname), { method: 'POST' }).then(function(data) {
+        if (data.error) alert(data.error);
+        else {
+            if (currentTab === 'dash') updateDashboard();
+            if (currentTab === 'servers') showServerDetail(hostname);
         }
+    }).catch(function(){});
+}
 
-        function removeServer(hostname) {
-            if (!confirm('Remove server "' + hostname + '"?')) return;
-            fetch('/api/servers?hostname=' + encodeURIComponent(hostname), { method: 'DELETE' })
-                .then(r => r.json())
-                .then(data => {
-                    if (data.error) alert(data.error);
-                    else updateServers();
-                })
-                .catch(() => {});
+// ---- LOGS ----
+function fetchLogs() {
+    api('/api/logs').then(function(logs) {
+        var el = document.getElementById('logs-box');
+        el.textContent = logs.join('\n');
+        el.scrollTop = el.scrollHeight;
+    });
+}
+
+function copyLogs() {
+    var text = document.getElementById('logs-box').textContent;
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text);
+        } else {
+            var ta = document.createElement('textarea');
+            ta.value = text; ta.style.position = 'fixed'; ta.style.left = '-9999px';
+            document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
         }
+        alert('Copied!');
+    } catch(e) { alert('Copy failed'); }
+}
 
-        function serverAction(action, hostname) {
-            var label = action === 'stop' ? 'Stop' : 'Restart';
-            if (!confirm(label + ' server "' + hostname + '"?')) return;
-            fetch('/api/action/' + action + '?hostname=' + encodeURIComponent(hostname), { method: 'POST' })
-                .then(r => r.json())
-                .then(data => {
-                    if (data.error) alert(data.error);
-                    else updateServers();
-                })
-                .catch(function() {});
+// ---- SETTINGS ----
+function updateSettings() {
+    api('/api/servers').then(function(servers) {
+        var tbody = document.getElementById('settings-server-list');
+        var empty = document.getElementById('settings-no-servers');
+        if (!servers || servers.length === 0) {
+            tbody.innerHTML = '';
+            empty.style.display = '';
+        } else {
+            empty.style.display = 'none';
+            var html = '';
+            servers.forEach(function(s) {
+                html += '<tr>';
+                html += '<td style="font-weight:600;">' + esc(s.hostname) + '</td>';
+                html += '<td style="font-family:var(--mono);color:var(--text-dim);">' + esc(s.backend) + '</td>';
+                html += '<td>' + (s.online ? '🟢' : '🔴') + '</td>';
+                html += '<td style="text-align:right;"><button class="btn btn-red btn-sm" onclick="removeServer(\'' + esc(s.hostname) + '\')">✕</button></td>';
+                html += '</tr>';
+            });
+            tbody.innerHTML = html;
         }
+    });
+}
 
-        function discoverServers() {
-            var list = document.getElementById('discover-list');
-            list.innerHTML = '<span style="color:var(--text-dim);">Searching Crafty...</span>';
-            fetch('/api/crafty/servers')
-                .then(r => r.json())
-                .then(servers => {
-                    if (servers.error) {
-                        list.innerHTML = '<span style="color:var(--red);">' + servers.error + '</span>';
-                        return;
-                    }
-                    if (!servers || servers.length === 0) {
-                        list.innerHTML = '<span style="color:var(--text-dim);">No servers found. Ensure "Show Status" is ON in Crafty.</span>';
-                        return;
-                    }
-                    var html = '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
-                    servers.forEach(function(s) {
-                        html += '<tr style="border-bottom:1px solid var(--border);">';
-                        html += '<td style="padding:6px 4px;font-weight:600;">' + s.name + '</td>';
-                        html += '<td style="padding:6px 4px;color:var(--text-dim);font-family:var(--mono);">' + s.ip + ':' + s.port + '</td>';
-                        html += '<td style="padding:6px 4px;text-align:right;"><button onclick="importServer(\'' + s.id + '\',\'' + s.name + '\',\'' + s.ip + '\',' + s.port + ')" style="background:var(--green);color:#fff;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px;">+ Import</button></td>';
-                        html += '</tr>';
-                    });
-                    html += '</table>';
-                    list.innerHTML = html;
-                })
-                .catch(function() {
-                    list.innerHTML = '<span style="color:var(--red);">Failed to connect to Crafty.</span>';
-                });
+function addServer() {
+    var h = document.getElementById('add-hostname').value.trim();
+    var b = document.getElementById('add-backend').value.trim();
+    var c = document.getElementById('add-serverid').value.trim();
+    var err = document.getElementById('add-error');
+    err.style.display = 'none';
+    if (!h || !b || !c) { err.textContent = 'All fields required.'; err.style.display = ''; return; }
+    api('/api/servers', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({hostname:h,backend:b,crafty_server_id:c}) })
+        .then(function(d) {
+            if (d.error) { err.textContent = d.error; err.style.display = ''; }
+            else { document.getElementById('add-hostname').value = ''; document.getElementById('add-backend').value = ''; document.getElementById('add-serverid').value = ''; updateSettings(); updateDashboard(); }
+        });
+}
+
+function removeServer(hostname) {
+    if (!confirm('Remove "' + hostname + '"?')) return;
+    api('/api/servers?hostname=' + encodeURIComponent(hostname), { method: 'DELETE' }).then(function(d) {
+        if (d.error) alert(d.error);
+        else { updateSettings(); updateDashboard(); }
+    });
+}
+
+function discoverServers() {
+    var list = document.getElementById('discover-list');
+    list.innerHTML = '<span style="color:var(--text-dim);">Searching Crafty...</span>';
+    api('/api/crafty/servers').then(function(servers) {
+        if (servers.error) { list.innerHTML = '<span style="color:var(--red);">' + servers.error + '</span>'; return; }
+        if (!servers || servers.length === 0) {
+            list.innerHTML = '<span style="color:var(--text-dim);">None found. Enable "Show Status" in Crafty for each server.</span>'; return;
         }
+        var html = '<table>';
+        servers.forEach(function(s) {
+            html += '<tr>';
+            html += '<td><b>' + esc(s.name) + '</b></td>';
+            html += '<td style="font-family:var(--mono);color:var(--text-dim);">' + esc(s.ip) + ':' + s.port + '</td>';
+            html += '<td style="text-align:right;"><button class="btn btn-green btn-sm" onclick="importServer(\'' + esc(s.id) + '\',\'' + esc(s.name) + '\',\'' + esc(s.ip) + '\',' + s.port + ')">+ Import</button></td>';
+            html += '</tr>';
+        });
+        html += '</table>';
+        list.innerHTML = html;
+    }).catch(function() { list.innerHTML = '<span style="color:var(--red);">Connection failed.</span>'; });
+}
 
-        function importServer(id, name, ip, port) {
-            var hostname = prompt('Hostname for this server:', name.toLowerCase().replace(/\s+/g, '-') + '.mc.example.com');
-            if (!hostname) return;
-            fetch('/api/servers', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ hostname: hostname, backend: ip + ':' + port, crafty_server_id: id })
-            })
-            .then(r => r.json())
-            .then(data => {
-                if (data.error) alert(data.error);
-                else updateServers();
-            })
-            .catch(function() {});
-        }
+function importServer(id, name, ip, port) {
+    var hostname = prompt('Hostname:', name.toLowerCase().replace(/\s+/g,'-') + '.mc.example.com');
+    if (!hostname) return;
+    addServerFields(hostname, ip + ':' + port, id);
+}
 
-        setInterval(update, 2000);
-        setInterval(updateServers, 3000);
-        update();
-        updateServers();
-    </script>
+function addServerFields(h, b, c) {
+    document.getElementById('add-hostname').value = h;
+    document.getElementById('add-backend').value = b;
+    document.getElementById('add-serverid').value = c;
+    document.getElementById('tab-settings').classList.add('active');
+    document.getElementById('tab-dash').classList.remove('active');
+    document.getElementById('tab-servers').classList.remove('active');
+    document.getElementById('tab-logs').classList.remove('active');
+    document.querySelectorAll('nav button').forEach(function(b) { b.classList.toggle('active', b.dataset.tab === 'settings'); });
+    currentTab = 'settings';
+    updateSettings();
+}
+
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+// ---- Init ----
+setInterval(function() {
+    if (currentTab === 'dash') updateDashboard();
+    if (currentTab === 'logs') fetchLogs();
+}, 2000);
+updateDashboard();
+fetchLogs();
+updateSettings();
+</script>
 </body>
 </html>

@@ -15,7 +15,7 @@ var dashboardHTML embed.FS
 // Start launches the HTTP dashboard server with server management API.
 // reloadServers is called after adding/removing a server to update routing at runtime.
 // stopServer/restartServer are Crafty action callbacks.
-func Start(state *proxy.State, addr, configPath string, reloadServers func(string) error, stopServer, restartServer func(string) error, listServers func() ([]proxy.DiscoveredServer, error)) {
+func Start(state *proxy.State, addr, configPath string, reloadServers func(string) error, stopServer, restartServer, startServer func(string) error, listServers func() ([]proxy.DiscoveredServer, error)) {
 	mux := http.NewServeMux()
 
 	// Dashboard page.
@@ -65,16 +65,18 @@ func Start(state *proxy.State, addr, configPath string, reloadServers func(strin
 			entries := state.ServerEntries()
 			statuses := state.ServerStatuses()
 			type serverInfo struct {
-				Hostname string `json:"hostname"`
-				Backend  string `json:"backend"`
-				Online   bool   `json:"online"`
+				Hostname       string `json:"hostname"`
+				Backend        string `json:"backend"`
+				CraftyServerID string `json:"crafty_server_id"`
+				Online         bool   `json:"online"`
 			}
 			servers := make([]serverInfo, 0, len(entries))
 			for _, e := range entries {
 				servers = append(servers, serverInfo{
-					Hostname: e.Hostname,
-					Backend:  e.Backend,
-					Online:   statuses[e.Hostname],
+					Hostname:       e.Hostname,
+					Backend:        e.Backend,
+					CraftyServerID: e.CraftyServerID,
+					Online:         statuses[e.Hostname],
 				})
 			}
 			json.NewEncoder(w).Encode(servers)
@@ -168,6 +170,8 @@ func Start(state *proxy.State, addr, configPath string, reloadServers func(strin
 
 		var err error
 		switch action {
+		case "start":
+			err = startServer(craftyID)
 		case "stop":
 			err = stopServer(craftyID)
 		case "restart":
