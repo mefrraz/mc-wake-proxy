@@ -457,28 +457,23 @@ function discoverServers() {
             html += '<tr>';
             html += '<td><b>' + esc(s.name) + '</b></td>';
             html += '<td style="font-family:var(--mono);color:var(--text-dim);">' + esc(s.ip) + ':' + s.port + '</td>';
-            html += '<td style="text-align:right;"><button class="btn btn-green btn-sm btn-import" data-id="' + esc(s.id) + '" data-name="' + esc(s.name) + '" data-ip="' + esc(s.ip) + '" data-port="' + s.port + '">Import</button></td>';
+            html += '<td style="text-align:right;"><button class="btn btn-green btn-sm" onclick="importDiscovered(\'' + esc(s.id) + '\',\'' + esc(s.name) + '\',\'' + esc(s.ip) + '\',' + s.port + ')">Import</button></td>';
             html += '</tr>';
         });
         html += '</table>';
         list.innerHTML = html;
-        list.querySelectorAll('.btn-import').forEach(function(b) {
-            b.addEventListener('click', function() {
-                var id = this.dataset.id;
-                var name = this.dataset.name;
-                var ip = this.dataset.ip;
-                var port = this.dataset.port;
-                var hostname = prompt('Hostname for this server:', name.toLowerCase().replace(/\s+/g,'-') + '.mc.example.com');
-                if (!hostname) return;
-                api('/api/servers', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({hostname:hostname, backend:ip+':'+port, crafty_server_id:id}) })
-                    .then(function(d) {
-                        if (d.error) { alert(d.error); return; }
-                        list.innerHTML = '<span style="color:var(--green);">Server imported: ' + esc(hostname) + '</span>';
-                        updateSettings(); updateDashboard();
-                    });
-            });
-        });
     }).catch(function(err) { list.innerHTML = '<span style="color:var(--red);">Could not connect to Crafty: ' + (err.message || err) + '</span>'; });
+}
+
+function importDiscovered(id, name, ip, port) {
+    var hostname = prompt('Hostname for this server:', name.toLowerCase().replace(/\s+/g,'-') + '.mc.example.com');
+    if (!hostname) return;
+    api('/api/servers', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({hostname:hostname, backend:ip+':'+port, crafty_server_id:id}) })
+        .then(function(d) {
+            if (d.error) { alert(d.error); return; }
+            document.getElementById('discover-list').innerHTML = '<span style="color:var(--green);">Server imported: ' + esc(hostname) + '</span>';
+            updateSettings(); updateDashboard();
+        });
 }
 
 // ---- Init ----
