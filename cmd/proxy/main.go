@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/mefrraz/mc-wake-proxy/internal/crafty"
 	"github.com/mefrraz/mc-wake-proxy/internal/proxmox"
@@ -115,6 +116,14 @@ func main() {
 
 	// Start backend health monitor.
 	p.StartMonitor()
+	// Start periodic health re-check (every 30s).
+	go func() {
+		for {
+			time.Sleep(30 * time.Second)
+			result := proxy.RunHealthChecks(cfg, pmClient, cmClient)
+			state.SetHealth(result)
+		}
+	}()
 	// Start auto-shutdown (if configured).
 	p.StartAutoShutdown()
 

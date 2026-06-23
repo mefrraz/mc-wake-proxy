@@ -190,6 +190,10 @@ th { color: var(--text-dim); font-weight: 500; font-size: 11px; text-transform: 
             <div style="font-size:13px;color:var(--text-dim);margin-bottom:16px;">Add your first server in Settings to get started.</div>
             <a href="/settings" class="btn btn-accent">Go to Settings</a>
         </div>
+        <div class="card" style="margin-top:16px;">
+            <h2 style="margin-bottom:8px;">Recent Activity</h2>
+            <div class="logs" id="dash-logs" style="height:120px;font-size:11px;">Loading...</div>
+        </div>
     </div>
 
     <!-- SERVERS -->
@@ -514,6 +518,12 @@ function updateDashboard() {
         }
         // Nav status.
         updateNavStatus();
+        // Log preview.
+        api('/api/logs').then(function(logs) {
+            var el = document.getElementById('dash-logs');
+            el.textContent = (logs||[]).slice(-6).join('\n');
+            el.scrollTop = el.scrollHeight;
+        }).catch(function(){});
     }).catch(function(){});
 }
 
