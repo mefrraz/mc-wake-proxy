@@ -67,6 +67,20 @@ func checkProxmox(cfg *Config, pm proxmox.LXCManager) HealthStatus {
 }
 
 func checkCrafty(cfg *Config, cm crafty.ServerManager) HealthStatus {
+	// Multi-server: check all configured servers.
+	if cfg.Servers != nil && len(cfg.Servers.Servers) > 0 {
+		var lastErr error
+		for _, s := range cfg.Servers.Servers {
+			info, err := cm.GetServerStatus(s.CraftyServerID)
+			if err == nil {
+				status := "stopped"
+				if info.Running { status = "running" }
+				return HealthStatus{Name: "Crafty", OK: true, Message: fmt.Sprintf("%s is %s (%d players)", s.Hostname, status, info.Online)}
+			}
+			lastErr = err
+		}
+		return HealthStatus{Name: "Crafty", OK: false, Message: fmt.Sprintf("All servers failed: %v", lastErr)}
+	}
 	info, err := cm.GetServerStatus(cfg.CraftyServerID)
 	if err != nil {
 		msg := err.Error()
@@ -113,6 +127,17 @@ func checkWOL(cfg *Config) HealthStatus {
 }
 
 func checkBackend(cfg *Config) HealthStatus {
+	// Multi-server: check all configured backends.
+	if cfg.Servers != nil && len(cfg.Servers.Servers) > 0 {
+		for _, s := range cfg.Servers.Servers {
+			conn, err := net.DialTimeout("tcp", s.Backend, 3*time.Second)
+			if err == nil {
+				conn.Close()
+				return HealthStatus{Name: "Backend", OK: true, Message: fmt.Sprintf("%s reachable", s.Backend)}
+			}
+		}
+		return HealthStatus{Name: "Backend", OK: false, Message: "No backends reachable"}
+	}
 	conn, err := net.DialTimeout("tcp", cfg.BackendTarget, 3*time.Second)
 	if err != nil {
 		return HealthStatus{

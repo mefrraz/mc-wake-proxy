@@ -29,12 +29,13 @@ nav a {
 }
 nav a:hover { background: var(--bg); color: var(--text); }
 nav a.active { background: rgba(79,140,255,0.12); color: var(--accent); }
-main { max-width: 960px; margin: 0 auto; padding: 28px 20px 60px; }
+main { max-width: 1100px; margin: 0 auto; padding: 32px 24px 60px; }
 .tab { display: none; }
 .tab.active { display: block; }
 .card {
     background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 20px 22px; margin-bottom: 16px;
+    border-radius: 12px; padding: 24px; margin-bottom: 24px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.25);
 }
 .card h2 { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
 .row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--border); }
@@ -136,28 +137,33 @@ th { color: var(--text-dim); font-weight: 500; font-size: 11px; text-transform: 
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
 .pulse { animation: pulse 1.2s ease-in-out infinite; }
 .hero {
-    padding: 28px 24px; border-radius: var(--radius); margin-bottom: 16px;
-    border: 2px solid var(--border); transition: border-color 0.5s, background-color 0.5s;
+    padding: 32px 28px; border-radius: 12px; margin-bottom: 24px;
+    border: 2px solid var(--border); transition: border-color 0.5s, background 0.5s;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
 }
-.hero-online { border-color: var(--green); background: #162618; }
-.hero-booting { border-color: var(--orange); background: #2e2410; }
-.hero-offline { border-color: var(--red); background: #2e1616; }
-.hero-stopping { border-color: var(--orange); background: #2e2410; }
-.hero-status { font-size: 20px; font-weight: 700; margin-bottom: 4px; color: var(--text); }
-.hero-sub { font-size: 13px; color: var(--text-dim); }
+.hero-online { border-color: var(--green); background: linear-gradient(135deg, #162618 0%, #1a2e1c 100%); }
+.hero-booting { border-color: var(--orange); background: linear-gradient(135deg, #2e2410 0%, #352a14 100%); }
+.hero-offline { border-color: var(--red); background: linear-gradient(135deg, #2e1616 0%, #351a1a 100%); }
+.hero-stopping { border-color: var(--orange); background: linear-gradient(135deg, #2e2410 0%, #352a14 100%); }
+.hero-status { font-size: 36px; font-weight: 700; margin-bottom: 6px; color: var(--text); line-height: 1.2; }
+.hero-sub { font-size: 15px; color: var(--text-dim); }
 .health-strip {
-    display: flex; gap: 16px; padding: 10px 16px; margin-bottom: 16px;
-    border: 1px solid var(--border); border-radius: var(--radius);
-    font-size: 12px; flex-wrap: wrap;
+    display: flex; gap: 10px; padding: 12px 16px; margin-bottom: 24px;
+    flex-wrap: wrap;
 }
-.health-strip span { display: flex; align-items: center; gap: 4px; }
+.health-strip .pill {
+    padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;
+    display: flex; align-items: center; gap: 6px;
+}
+.pill-ok { background: #162618; color: var(--green); border: 1px solid #1f3d26; }
+.pill-err { background: #2e1616; color: var(--red); border: 1px solid #3d1f1f; }
 .empty-state { text-align: center; padding: 40px 20px; }
 </style>
 </head>
 <body>
 
 <nav>
-    <div class="logo"><span class="dot" id="nav-dot"></span>mc-wake-proxy</div>
+    <div class="logo"><img src="/logo.png" height="24" style="vertical-align:middle;margin-right:8px;"><span class="dot" id="nav-dot"></span>mc-wake-proxy</div>
     <div style="display:flex;gap:4px;flex:1;justify-content:center;">
         <a href="/" data-tab="dash" class="active">Dashboard</a>
         <a href="/servers" data-tab="servers">Servers</a>
@@ -473,7 +479,7 @@ function updateDashboard() {
         api('/api/health').then(function(h) {
             var html = '';
             (h.checks||[]).forEach(function(c) {
-                html += '<span title="' + esc(c.message||'') + '" style="color:' + (c.ok ? 'var(--green)' : 'var(--red)') + '">' + (c.ok ? '✓' : '✗') + ' ' + c.name + '</span>';
+                html += '<span class="pill ' + (c.ok ? 'pill-ok' : 'pill-err') + '" title="' + esc(c.message||'') + '">' + (c.ok ? '✓' : '✗') + ' ' + c.name + '</span>';
             });
             document.getElementById('dash-health').innerHTML = html;
         }).catch(function(){});
