@@ -21,7 +21,7 @@ var dashboardHTML embed.FS
 var logoPNG []byte
 
 // Start launches the HTTP dashboard server.
-func Start(state *proxy.State, addr, configPath, password string, reloadServers func(string) error, stopServer, restartServer, startServer func(string) error, sendCommand func(string, string) error, triggerWake func(string), listServers func() ([]proxy.DiscoveredServer, error), listNodes func() []proxy.NodeConfig) {
+func Start(state *proxy.State, addr, configPath, nodesPath, password string, reloadServers func(string) error, stopServer, restartServer, startServer func(string) error, sendCommand func(string, string) error, triggerWake func(string), listServers func() ([]proxy.DiscoveredServer, error), listNodes func() []proxy.NodeConfig) {
 	mux := http.NewServeMux()
 
 	// Session token from password hash.
@@ -265,7 +265,23 @@ func Start(state *proxy.State, addr, configPath, password string, reloadServers 
 
 	api("/api/nodes", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(listNodes())
+		switch r.Method {
+		case "GET":
+			json.NewEncoder(w).Encode(listNodes())
+		case "POST":
+			var n proxy.NodeConfig
+			if err := json.NewDecoder(r.Body).Decode(&n); err != nil { w.WriteHeader(400); return }
+			if n.ID == "" || n.IP == "" { w.WriteHeader(400); json.NewEncoder(w).Encode(map[string]string{"error":"id and ip required"}); return }
+			if err := proxy.AddNodeToFile(nodesPath, n); err != nil { w.WriteHeader(409); json.NewEncoder(w).Encode(map[string]string{"error":err.Error()}); return }
+			w.WriteHeader(201); json.NewEncoder(w).Encode(map[string]string{"status":"ok"})
+		case "DELETE":
+			id := r.URL.Query().Get("id")
+			if id == "" { w.WriteHeader(400); return }
+			if err := proxy.RemoveNodeFromFile(nodesPath, id); err != nil { w.WriteHeader(404); json.NewEncoder(w).Encode(map[string]string{"error":err.Error()}); return }
+			json.NewEncoder(w).Encode(map[string]string{"status":"ok"})
+		default:
+			w.WriteHeader(405)
+		}
 	})
 
 	// Serve logo.

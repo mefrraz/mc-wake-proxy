@@ -110,3 +110,54 @@ func atoi(s string) int {
 	fmt.Sscanf(s, "%d", &n)
 	return n
 }
+
+// AddNodeToFile adds a node to nodes.yml.
+func AddNodeToFile(path string, node NodeConfig) error {
+	nc, err := LoadNodes(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if nc == nil {
+		nc = &NodesConfig{}
+	}
+	for _, n := range nc.Nodes {
+		if n.ID == node.ID {
+			return fmt.Errorf("node %q already exists", node.ID)
+		}
+	}
+	if node.CraftyPort == 0 {
+		node.CraftyPort = 8443
+	}
+	nc.Nodes = append(nc.Nodes, node)
+	data, err := yaml.Marshal(nc)
+	if err != nil {
+		return fmt.Errorf("marshal nodes: %w", err)
+	}
+	return os.WriteFile(path, data, 0644)
+}
+
+// RemoveNodeFromFile removes a node by ID from nodes.yml.
+func RemoveNodeFromFile(path, id string) error {
+	nc, err := LoadNodes(path)
+	if err != nil {
+		return err
+	}
+	if nc == nil {
+		return fmt.Errorf("no nodes configured")
+	}
+	var filtered []NodeConfig
+	found := false
+	for _, n := range nc.Nodes {
+		if n.ID == id { found = true; continue }
+		filtered = append(filtered, n)
+	}
+	if !found {
+		return fmt.Errorf("node %q not found", id)
+	}
+	nc.Nodes = filtered
+	data, err := yaml.Marshal(nc)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0644)
+}
