@@ -15,6 +15,7 @@ import (
 type LXCManager interface {
 	GetLXCStatus(node, lxcID string) (*LXCStatus, error)
 	StartLXC(node, lxcID string) (string, error)
+	GetLXCResources(node, lxcID string) (*LXCResources, error)
 }
 
 // Client talks to the Proxmox VE REST API using an API token.
@@ -123,4 +124,25 @@ func (c *Client) StartLXC(node, lxcID string) (string, error) {
 		return "", err
 	}
 	return upid, nil
+}
+
+// LXCResources holds resource usage for an LXC container.
+type LXCResources struct {
+	CPU     float64 `json:"cpu"`      // CPU usage (0-1 scale)
+	Mem     int64   `json:"mem"`      // memory used in bytes
+	MaxMem  int64   `json:"maxmem"`   // memory total in bytes
+	Disk    int64   `json:"disk"`     // disk used in bytes
+	MaxDisk int64   `json:"maxdisk"`  // disk total in bytes
+	Uptime  int64   `json:"uptime"`   // uptime in seconds
+	CPUs    int     `json:"cpus"`     // number of cores
+}
+
+// GetLXCResources returns resource usage for an LXC container.
+func (c *Client) GetLXCResources(node, lxcID string) (*LXCResources, error) {
+	path := fmt.Sprintf("/nodes/%s/lxc/%s/status/current", node, lxcID)
+	var r LXCResources
+	if err := c.do("GET", path, nil, &r); err != nil {
+		return nil, err
+	}
+	return &r, nil
 }

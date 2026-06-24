@@ -311,14 +311,44 @@ function renderNodes() {
     }).catch(function(){});
 }
 function showNodeDetail(nodeId) {
-    // Switch to servers tab filtered by node, or show inline detail.
-    // For now, show as toast the node info.
     api('/api/nodes').then(function(nodes) {
         var n = null; (nodes||[]).forEach(function(x) { if (x.id === nodeId) n = x; });
         if (!n) return;
-        toast('Node: ' + (n.name||n.id) + ' (' + n.ip + ':' + (n.crafty_port||8443) + ') ' + (n.type||'lxc'), true);
+        // Build a detail view under the nodes grid.
+        var grid = document.getElementById('nodes-grid');
+        var html = '<div class="topbar" style="position:static;background:transparent;backdrop-filter:none;padding:0 0 16px 0;border-bottom:1px solid var(--line);margin-bottom:20px;"><div><div class="breadcrumb"><a href="#" onclick="switchView(\'nodes\');renderNodes();return false;">Nodes</a> / ' + esc(n.name||n.id) + '</div><h1>' + esc(n.name||n.id) + ' <span class="status-pill online"><span class="dot online"></span>Online</span></h1></div><button class="btn btn-ghost btn-sm" onclick="switchView(\'nodes\');renderNodes();return false;">Back to Nodes</button></div>';
+        html += '<div class="info-grid"><div class="info-card"><div class="label">IP / Crafty</div><div class="value" style="font-size:13px;">' + esc(n.ip) + ':' + (n.crafty_port||8443) + '</div></div>';
+        html += '<div class="info-card"><div class="label">Type</div><div class="value"><span class="badge ' + (n.type||'lxc') + '">' + esc(n.type||'lxc') + '</span></div></div>';
+        html += '<div class="info-card"><div class="label">VMID</div><div class="value">' + (n.proxmox_vmid||'N/A') + '</div></div>';
+        html += '<div class="info-card"><div class="label">Servers</div><div class="value" id="nd-servers">...</div></div></div>';
+        html += '<div class="res-grid"><div class="res-card"><div class="rhead"><span class="t">CPU</span><span class="pct" id="nd-cpu-pct">--%</span></div><div class="bar"><div class="bar-fill" id="nd-cpu-bar" style="width:0%"></div></div><div class="detail" id="nd-cpu-detail">Loading...</div></div>';
+        html += '<div class="res-card"><div class="rhead"><span class="t">Memory</span><span class="pct" id="nd-ram-pct">--%</span></div><div class="bar"><div class="bar-fill" id="nd-ram-bar" style="width:0%"></div></div><div class="detail" id="nd-ram-detail">Loading...</div></div>';
+        html += '<div class="res-card"><div class="rhead"><span class="t">Disk</span><span class="pct" id="nd-disk-pct">--%</span></div><div class="bar"><div class="bar-fill" id="nd-disk-bar" style="width:0%"></div></div><div class="detail" id="nd-disk-detail">Loading...</div></div></div>';
+        grid.innerHTML = html;
+        // Inject res-card CSS
+        if (!document.getElementById('res-card-css')) { var rs = document.createElement('style'); rs.id = 'res-card-css'; rs.textContent = '.info-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px;}.info-card{background:var(--bg-panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;}.info-card .label{font-size:11.5px;color:var(--muted);margin-bottom:8px;}.info-card .value{font-family:\'JetBrains Mono\',monospace;font-size:15px;font-weight:600;}.res-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:22px;}.res-card{background:var(--bg-panel);border:1px solid var(--line);border-radius:12px;padding:20px;}.res-card .rhead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;}.res-card .rhead .t{font-size:13px;color:var(--muted);}.res-card .rhead .pct{font-family:\'JetBrains Mono\',monospace;font-size:20px;font-weight:700;}'; document.head.appendChild(rs); }
+        // Fetch resources
+        api('/api/node-resources?id=' + encodeURIComponent(nodeId)).then(function(r) {
+            if (!r) return;
+            var cpuPct = Math.round(r.cpu_pct||0), ramPct = Math.round(r.ram_pct||0), diskPct = Math.round(r.disk_pct||0);
+            document.getElementById('nd-cpu-pct').textContent = cpuPct + '%';
+            document.getElementById('nd-cpu-bar').style.width = cpuPct + '%';
+            document.getElementById('nd-cpu-detail').textContent = (r.cores||'?') + ' cores';
+            document.getElementById('nd-ram-pct').textContent = ramPct + '%';
+            document.getElementById('nd-ram-bar').style.width = ramPct + '%';
+            document.getElementById('nd-ram-detail').textContent = formatBytes(r.ram_used||0) + ' / ' + formatBytes(r.ram_total||0);
+            document.getElementById('nd-disk-pct').textContent = diskPct + '%';
+            document.getElementById('nd-disk-bar').style.width = diskPct + '%';
+            document.getElementById('nd-disk-detail').textContent = formatBytes(r.disk_used||0) + ' / ' + formatBytes(r.disk_total||0);
+        }).catch(function(){});
+        // Count servers for this node
+        api('/api/servers').then(function(srv) {
+            var count = 0; (srv||[]).forEach(function(s) { if ((s.node_id||'default') === nodeId) count++; });
+            document.getElementById('nd-servers').textContent = count;
+        }).catch(function(){});
     }).catch(function(){});
 }
+function formatBytes(b) { if (!b || b<0) return '0 B'; var u=['B','KB','MB','GB','TB']; var i=0; while(b>=1024&&i<4){b/=1024;i++;} return b.toFixed(i>0?1:0)+' '+u[i]; }
 function renderServersFull() { api('/api/servers').then(function(srv) { var h1 = '', h2 = ''; (srv||[]).forEach(function(s) { var cls = statusClass(s.online, s.phase), label = statusLabel(s.online, s.phase); h1 += '<div class="srow"><span class="status-pill ' + cls + '"><span class="dot ' + cls + '" style="width:6px;height:6px;"></span>' + label + '</span><div class="name-block"><div class="sname">' + esc(s.hostname) + '</div><div class="smeta"><span>' + esc(s.backend) + '</span><span>Crafty: ' + esc((s.crafty_server_id||'').substring(0,8)) + '</span></div></div><div class="srow-actions">' + (s.online ? '<button class="btn btn-sm btn-danger" onclick="serverAction(\'stop\',\'' + esc(s.hostname) + '\')">Stop</button><button class="btn btn-sm btn-ghost" onclick="serverAction(\'restart\',\'' + esc(s.hostname) + '\')">Restart</button>' : '<button class="btn btn-sm btn-ghost" onclick="serverAction(\'start\',\'' + esc(s.hostname) + '\')">Start</button>') + '<button class="icon-btn" title="Remove" onclick="removeServer(\'' + esc(s.hostname) + '\')">&times;</button></div></div>'; });
         document.getElementById('servers-full-list').innerHTML = h1 || '<div class="empty"><div class="ic">⛁</div>No servers.</div>';
         document.getElementById('settings-server-list').innerHTML = h1 || '<div class="empty"><div class="ic">⛁</div>No servers.</div>';

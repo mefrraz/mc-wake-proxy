@@ -21,7 +21,7 @@ var dashboardHTML embed.FS
 var logoPNG []byte
 
 // Start launches the HTTP dashboard server.
-func Start(state *proxy.State, addr, configPath, nodesPath, password string, reloadServers func(string) error, stopServer, restartServer, startServer func(string) error, sendCommand func(string, string) error, triggerWake func(string), listServers func() ([]proxy.DiscoveredServer, error), listNodes func() []proxy.NodeConfig) {
+func Start(state *proxy.State, addr, configPath, nodesPath, password string, reloadServers func(string) error, stopServer, restartServer, startServer func(string) error, sendCommand func(string, string) error, triggerWake func(string), listServers func() ([]proxy.DiscoveredServer, error), listNodes func() []proxy.NodeConfig, nodeResources func(nodeID string) map[string]interface{}) {
 	mux := http.NewServeMux()
 
 	// Session token from password hash.
@@ -282,6 +282,13 @@ func Start(state *proxy.State, addr, configPath, nodesPath, password string, rel
 		default:
 			w.WriteHeader(405)
 		}
+	})
+
+	api("/api/node-resources", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		id := r.URL.Query().Get("id")
+		if id == "" { w.WriteHeader(400); return }
+		json.NewEncoder(w).Encode(nodeResources(id))
 	})
 
 	// Serve logo.

@@ -12,6 +12,7 @@ type mockPM struct{ status *proxmox.LXCStatus; err error }
 
 func (m *mockPM) GetLXCStatus(node, lxcID string) (*proxmox.LXCStatus, error) { return m.status, m.err }
 func (m *mockPM) StartLXC(node, lxcID string) (string, error)                   { return "UPID:ok", m.err }
+func (m *mockPM) GetLXCResources(node, lxcID string) (*proxmox.LXCResources, error) { return nil, nil }
 
 type mockCM struct{ info *crafty.ServerInfo; err error }
 

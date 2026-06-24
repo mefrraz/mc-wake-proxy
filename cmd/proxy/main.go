@@ -115,6 +115,30 @@ func main() {
 	go web.Start(state, cfg.WebPort, cfg.ServersPath, cfg.NodesPath, cfg.ProxyPassword, p.ReloadServers, cmClient.StopServer, cmClient.RestartServer, cmClient.StartServer, cmClient.SendCommand, p.TriggerWake, discoverServers, func() []proxy.NodeConfig {
 		if cfg.Nodes != nil { return cfg.Nodes.Nodes }
 		return nil
+	}, func(nodeID string) map[string]interface{} {
+		nc := cfg.Nodes
+		if nc == nil { return nil }
+		n := nc.LookupNode(nodeID)
+		if n == nil || n.ProxmoxVMID == "" || n.ProxmoxHost == "" { return nil }
+		pc := proxmox.NewClient(n.ProxmoxHost, "8006", cfg.ProxmoxTokenID, cfg.ProxmoxTokenSecret, cfg.ProxmoxInsecure)
+		res, err := pc.GetLXCResources(n.ProxmoxNode, n.ProxmoxVMID)
+		if err != nil { return nil }
+		cpuPct := res.CPU * 100
+		var ramPct float64
+		if res.MaxMem > 0 { ramPct = float64(res.Mem) / float64(res.MaxMem) * 100 }
+		var diskPct float64
+		if res.MaxDisk > 0 { diskPct = float64(res.Disk) / float64(res.MaxDisk) * 100 }
+		return map[string]interface{}{
+			"cpu_pct":   cpuPct,
+			"ram_used":  res.Mem,
+			"ram_total": res.MaxMem,
+			"ram_pct":   ramPct,
+			"disk_used": res.Disk,
+			"disk_total": res.MaxDisk,
+			"disk_pct":  diskPct,
+			"uptime":    res.Uptime,
+			"cores":     res.CPUs,
+		}
 	})
 
 	// Start backend health monitor.
