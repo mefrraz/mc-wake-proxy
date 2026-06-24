@@ -289,15 +289,16 @@ function renderNodes() {
         (nodes||[]).forEach(function(n) {
             var cls = 'online';
             var serverCount = counts[n.id] || 0;
+            var escId = esc(n.id).replace(/[^a-zA-Z0-9]/g,'_');
             html += '<div class="node-card" onclick="showNodeDetail(\'' + esc(n.id) + '\')">';
             html += '<div class="node-card-top"><div><div class="node-name">' + esc(n.name||n.id) + '</div>';
             html += '<div class="node-sub">' + esc(n.ip) + ':' + (n.crafty_port||8443) + '</div></div>';
             html += '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">';
             html += '<span class="badge ' + (n.type||'lxc') + '">' + esc(n.type||'lxc') + '</span>';
             html += '<span class="status-pill ' + cls + '"><span class="dot ' + cls + '"></span>Online</span></div></div>';
-            html += '<div class="res-rows"><div class="res-row"><div class="res-label"><span>CPU</span><span class="val">N/A</span></div><div class="bar"><div class="bar-fill" style="width:0%"></div></div></div>';
-            html += '<div class="res-row"><div class="res-label"><span>RAM</span><span class="val">N/A</span></div><div class="bar"><div class="bar-fill" style="width:0%"></div></div></div>';
-            html += '<div class="res-row"><div class="res-label"><span>Disk</span><span class="val">N/A</span></div><div class="bar"><div class="bar-fill" style="width:0%"></div></div></div></div>';
+            html += '<div class="res-rows"><div class="res-row"><div class="res-label"><span>CPU</span><span class="val" id="' + escId + '-cpu">...</span></div><div class="bar"><div class="bar-fill" id="' + escId + '-cpu-bar" style="width:0%"></div></div></div>';
+            html += '<div class="res-row"><div class="res-label"><span>RAM</span><span class="val" id="' + escId + '-ram">...</span></div><div class="bar"><div class="bar-fill" id="' + escId + '-ram-bar" style="width:0%"></div></div></div>';
+            html += '<div class="res-row"><div class="res-label"><span>Disk</span><span class="val" id="' + escId + '-disk">...</span></div><div class="bar"><div class="bar-fill" id="' + escId + '-disk-bar" style="width:0%"></div></div></div></div>';
             html += '<div class="node-foot"><span><b>' + serverCount + '</b> servers</span><span>Details →</span></div></div>';
         });
         document.getElementById('nodes-grid').innerHTML = html || '<div class="empty"><div class="ic">🖧</div>No nodes found.</div>';
@@ -307,6 +308,24 @@ function renderNodes() {
             s.textContent = '.node-card{background:var(--bg-panel);border:1px solid var(--line);border-radius:14px;padding:22px;cursor:pointer;transition:all .15s;}.node-card:hover{border-color:var(--teal);transform:translateY(-2px);box-shadow:0 14px 30px -16px rgba(0,0,0,0.5);}.node-card-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;}.node-name{font-size:16.5px;font-weight:700;}.node-sub{font-family:\'JetBrains Mono\',monospace;font-size:12px;color:var(--muted-2);margin-top:4px;}.badge{font-family:\'JetBrains Mono\',monospace;font-size:10.5px;font-weight:700;padding:4px 9px;border-radius:5px;text-transform:uppercase;letter-spacing:.04em;}.badge.vm{background:rgba(143,201,196,0.12);color:#8fc9c4;}.badge.lxc{background:rgba(180,224,102,0.12);color:var(--online);}.badge.baremetal{background:rgba(143,201,196,0.12);color:#8fc9c4;}.res-rows{margin:18px 0 14px;display:flex;flex-direction:column;gap:12px;}.res-row .res-label{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:5px;}.res-row .res-label .val{font-family:\'JetBrains Mono\',monospace;color:var(--text);}.bar{height:6px;border-radius:6px;background:var(--bg);overflow:hidden;}.bar-fill{height:100%;border-radius:6px;background:var(--teal-bright);}.bar-fill.warn{background:var(--sleeping);}.bar-fill.danger{background:var(--danger);}.node-foot{display:flex;justify-content:space-between;align-items:center;padding-top:14px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted-2);}.node-foot b{color:var(--text);}';
             document.head.appendChild(s);
         }
+        // Fetch real node resources.
+        (nodes||[]).forEach(function(n) {
+            if (!n.proxmox_vmid || !n.proxmox_host) return;
+            var escId = esc(n.id).replace(/[^a-zA-Z0-9]/g,'_');
+            api('/api/node-resources?id=' + encodeURIComponent(n.id)).then(function(r) {
+                if (!r) return;
+                var cpuPct = Math.round(r.cpu_pct||0), ramPct = Math.round(r.ram_pct||0), diskPct = Math.round(r.disk_pct||0);
+                var cel = document.getElementById(escId + '-cpu'), cbar = document.getElementById(escId + '-cpu-bar');
+                var rel = document.getElementById(escId + '-ram'), rbar = document.getElementById(escId + '-ram-bar');
+                var del = document.getElementById(escId + '-disk'), dbar = document.getElementById(escId + '-disk-bar');
+                if (cel) cel.textContent = cpuPct + '%';
+                if (cbar) { cbar.style.width = cpuPct + '%'; cbar.className = 'bar-fill' + (cpuPct>85?' danger':cpuPct>60?' warn':''); }
+                if (rel) rel.textContent = formatBytes(r.ram_used||0) + ' / ' + formatBytes(r.ram_total||0);
+                if (rbar) { rbar.style.width = ramPct + '%'; rbar.className = 'bar-fill' + (ramPct>85?' danger':ramPct>60?' warn':''); }
+                if (del) del.textContent = formatBytes(r.disk_used||0) + ' / ' + formatBytes(r.disk_total||0);
+                if (dbar) { dbar.style.width = diskPct + '%'; dbar.className = 'bar-fill' + (diskPct>85?' danger':diskPct>60?' warn':''); }
+            }).catch(function(){});
+        });
     }).catch(function(){});
     }).catch(function(){});
 }
