@@ -21,7 +21,7 @@ var dashboardHTML embed.FS
 var logoPNG []byte
 
 // Start launches the HTTP dashboard server.
-func Start(state *proxy.State, addr, configPath, password string, reloadServers func(string) error, stopServer, restartServer, startServer func(string) error, sendCommand func(string, string) error, triggerWake func(string), listServers func() ([]proxy.DiscoveredServer, error)) {
+func Start(state *proxy.State, addr, configPath, password string, reloadServers func(string) error, stopServer, restartServer, startServer func(string) error, sendCommand func(string, string) error, triggerWake func(string), listServers func() ([]proxy.DiscoveredServer, error), listNodes func() []proxy.NodeConfig) {
 	mux := http.NewServeMux()
 
 	// Session token from password hash.
@@ -176,6 +176,7 @@ func Start(state *proxy.State, addr, configPath, password string, reloadServers 
 				Hostname       string    `json:"hostname"`
 				Backend        string    `json:"backend"`
 				CraftyServerID string    `json:"crafty_server_id"`
+				NodeID         string    `json:"node_id"`
 				Online         bool      `json:"online"`
 				Phase          string    `json:"phase"`
 				PhaseSince     time.Time `json:"phase_since"`
@@ -184,7 +185,7 @@ func Start(state *proxy.State, addr, configPath, password string, reloadServers 
 			out := make([]si, 0, len(entries))
 			for _, e := range entries {
 				out = append(out, si{
-					e.Hostname, e.Backend, e.CraftyServerID, statuses[e.Hostname],
+					e.Hostname, e.Backend, e.CraftyServerID, e.NodeID, statuses[e.Hostname],
 					string(state.PhaseForServer(e.Hostname)),
 					state.PhaseSinceForServer(e.Hostname),
 					state.ServerWaitingCount(e.Hostname),
@@ -260,6 +261,11 @@ func Start(state *proxy.State, addr, configPath, password string, reloadServers 
 		servers, err := listServers()
 		if err != nil { w.WriteHeader(500); json.NewEncoder(w).Encode(map[string]string{"error":err.Error()}); return }
 		json.NewEncoder(w).Encode(servers)
+	})
+
+	api("/api/nodes", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(listNodes())
 	})
 
 	// Serve logo.

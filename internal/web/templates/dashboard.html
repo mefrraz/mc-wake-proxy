@@ -130,6 +130,7 @@ main { overflow-y: auto; position: relative; }
     <div class="sb-nav">
         <button class="sb-link active" data-view="dashboard"><span class="ic">▦</span> Dashboard</button>
         <button class="sb-link" data-view="servers"><span class="ic">⛁</span> Servers</button>
+        <button class="sb-link" data-view="nodes"><span class="ic">🖧</span> Nodes</button>
         <button class="sb-link" data-view="logs"><span class="ic">▤</span> Logs</button>
         <button class="sb-link" data-view="settings"><span class="ic">⚙</span> Settings</button>
         <button class="sb-link" data-view="docs"><span class="ic">?</span> Docs</button>
@@ -163,6 +164,13 @@ main { overflow-y: auto; position: relative; }
         <div class="topbar"><div><h1>Servers</h1><div class="sub">Manage servers, send commands, view details</div></div></div>
         <div class="content">
             <div class="panel"><div id="servers-full-list"></div></div>
+        </div>
+    </div>
+    <!-- NODES -->
+    <div class="view" id="view-nodes">
+        <div class="topbar"><div><h1>Nodes</h1><div class="sub">Crafty Controller instances hosting your servers</div></div></div>
+        <div class="content">
+            <div id="nodes-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:18px;"></div>
         </div>
     </div>
     <!-- LOGS -->
@@ -204,7 +212,7 @@ main { overflow-y: auto; position: relative; }
 var currentView = 'dashboard', detailOpen = {};
 function api(url, opts) { opts = opts || {}; if (opts.method === 'POST' || opts.method === 'DELETE') { opts.headers = opts.headers || {}; opts.headers['X-Requested-With'] = 'mc-wake-proxy'; } return fetch(url, opts).then(function(r) { return r.json(); }); }
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-function switchView(v) { currentView = v; document.querySelectorAll('.sb-link').forEach(function(b) { b.classList.toggle('active', b.dataset.view === v); }); document.querySelectorAll('.view').forEach(function(vw) { vw.classList.toggle('active', vw.id === 'view-' + v); }); if (v === 'dashboard') updateDashboard(); if (v === 'servers') renderServersFull(); if (v === 'logs') fetchLogs(); if (v === 'settings') renderServersFull(); }
+function switchView(v) { currentView = v; document.querySelectorAll('.sb-link').forEach(function(b) { b.classList.toggle('active', b.dataset.view === v); }); document.querySelectorAll('.view').forEach(function(vw) { vw.classList.toggle('active', vw.id === 'view-' + v); }); if (v === 'dashboard') updateDashboard(); if (v === 'servers') renderServersFull(); if (v === 'nodes') renderNodes(); if (v === 'logs') fetchLogs(); if (v === 'settings') renderServersFull(); }
 document.querySelectorAll('.sb-link').forEach(function(b) { b.addEventListener('click', function() { switchView(this.dataset.view); }); });
 var toastTimer; function toast(msg, ok) { var t = document.getElementById('toast'); t.textContent = msg; t.className = 'toast ' + (ok === false ? 'toast-err' : ''); t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(function() { t.classList.remove('show'); }, 2600); }
 function statusLabel(on, ph) { if (on) return 'Online'; if (ph === 'stopping') return 'Stopping'; if (ph === 'idle' || ph === 'ready' || !ph) return 'Offline'; return 'Starting'; }
@@ -256,7 +264,24 @@ function buildTimeline(hostname) {
 }
 function sendCmd(hostname) { var id = 'cmd-' + esc(hostname).replace(/[^a-zA-Z0-9]/g,'_'); var cmd = document.getElementById(id).value.trim(); if (!cmd) return; var sens = ['stop','restart','op','deop','ban','ban-ip','pardon','pardon-ip','kick','whitelist']; var f = cmd.split(' ')[0].toLowerCase(); if (sens.indexOf(f) !== -1) { if (!confirm('Send "' + f + '" to ' + hostname + '?')) return; } api('/api/console?hostname=' + encodeURIComponent(hostname) + '&cmd=' + encodeURIComponent(cmd), {method:'POST'}).then(function(d) { if (d.error) { toast(d.error, false); return; } document.getElementById(id).value = ''; toast('Command sent', true); }).catch(function() { toast('Failed', false); }); }
 function serverAction(action, hostname) { var labels = {stop:'Stop',restart:'Restart',start:'Start'}; if (!confirm(labels[action] + ' ' + hostname + '?')) return; api('/api/action/' + action + '?hostname=' + encodeURIComponent(hostname), {method:'POST'}).then(function(d) { if (d.error) { toast(d.error, false); return; } if (currentView === 'dashboard') updateDashboard(); if (currentView === 'servers') renderServersFull(); }).catch(function() { toast('Failed', false); }); }
-function renderServersFull() { api('/api/servers').then(function(srv) { var h1 = '', h2 = ''; (srv||[]).forEach(function(s) { var cls = statusClass(s.online, s.phase), label = statusLabel(s.online, s.phase); h1 += '<div class="srow"><span class="status-pill ' + cls + '"><span class="dot ' + cls + '" style="width:6px;height:6px;"></span>' + label + '</span><div class="name-block"><div class="sname">' + esc(s.hostname) + '</div><div class="smeta"><span>' + esc(s.backend) + '</span><span>Crafty: ' + esc((s.crafty_server_id||'').substring(0,8)) + '</span></div></div><div class="srow-actions">' + (s.online ? '<button class="btn btn-sm btn-danger" onclick="serverAction(\'stop\',\'' + esc(s.hostname) + '\')">Stop</button><button class="btn btn-sm btn-ghost" onclick="serverAction(\'restart\',\'' + esc(s.hostname) + '\')">Restart</button>' : '<button class="btn btn-sm btn-ghost" onclick="serverAction(\'start\',\'' + esc(s.hostname) + '\')">Start</button>') + '<button class="icon-btn" title="Remove" onclick="removeServer(\'' + esc(s.hostname) + '\')">&times;</button></div></div>'; });
+function renderNodes() {
+    api('/api/nodes').then(function(nodes) {
+        var html = '';
+        (nodes||[]).forEach(function(n) {
+            var cls = 'online';
+            html += '<div class="panel" style="cursor:default;padding:22px;">';
+            html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">';
+            html += '<div><div style="font-size:16.5px;font-weight:700;">' + esc(n.name || n.id) + '</div>';
+            html += '<div class="mono" style="font-size:12px;color:var(--muted-2);margin-top:4px;">' + esc(n.ip) + ':' + (n.crafty_port||8443) + '</div></div>';
+            html += '<span class="status-pill ' + cls + '"><span class="dot ' + cls + '"></span>Online</span></div>';
+            html += '<div style="font-size:12px;color:var(--muted);margin-top:12px;">Type: <b style="color:var(--text);">' + esc(n.type||'lxc') + '</b>';
+            if (n.proxmox_vmid) html += ' · VMID: <b style="color:var(--text);">' + esc(n.proxmox_vmid) + '</b>';
+            if (n.wol_mac) html += ' · WOL: <b style="color:var(--text);">' + esc(n.wol_mac) + '</b>';
+            html += '</div></div>';
+        });
+        document.getElementById('nodes-grid').innerHTML = html || '<div class="empty"><div class="ic">🖧</div>No nodes found. A default node is created from your env vars.</div>';
+    }).catch(function(){});
+} api('/api/servers').then(function(srv) { var h1 = '', h2 = ''; (srv||[]).forEach(function(s) { var cls = statusClass(s.online, s.phase), label = statusLabel(s.online, s.phase); h1 += '<div class="srow"><span class="status-pill ' + cls + '"><span class="dot ' + cls + '" style="width:6px;height:6px;"></span>' + label + '</span><div class="name-block"><div class="sname">' + esc(s.hostname) + '</div><div class="smeta"><span>' + esc(s.backend) + '</span><span>Crafty: ' + esc((s.crafty_server_id||'').substring(0,8)) + '</span></div></div><div class="srow-actions">' + (s.online ? '<button class="btn btn-sm btn-danger" onclick="serverAction(\'stop\',\'' + esc(s.hostname) + '\')">Stop</button><button class="btn btn-sm btn-ghost" onclick="serverAction(\'restart\',\'' + esc(s.hostname) + '\')">Restart</button>' : '<button class="btn btn-sm btn-ghost" onclick="serverAction(\'start\',\'' + esc(s.hostname) + '\')">Start</button>') + '<button class="icon-btn" title="Remove" onclick="removeServer(\'' + esc(s.hostname) + '\')">&times;</button></div></div>'; });
         document.getElementById('servers-full-list').innerHTML = h1 || '<div class="empty"><div class="ic">⛁</div>No servers.</div>';
         document.getElementById('settings-server-list').innerHTML = h1 || '<div class="empty"><div class="ic">⛁</div>No servers.</div>';
     }).catch(function(){}); }

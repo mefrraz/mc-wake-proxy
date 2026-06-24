@@ -10,8 +10,9 @@ import (
 // ServerEntry represents one Minecraft server backend and its routing hostname.
 type ServerEntry struct {
 	Hostname        string `yaml:"hostname" json:"hostname"`
-	Backend         string `yaml:"backend" json:"backend"`                   // IP:port
-	CraftyServerID  string `yaml:"crafty_server_id" json:"crafty_server_id"` // Crafty UUID
+	Backend         string `yaml:"backend" json:"backend"`
+	CraftyServerID  string `yaml:"crafty_server_id" json:"crafty_server_id"`
+	NodeID          string `yaml:"node_id,omitempty" json:"node_id,omitempty"`
 }
 
 // DiscoveredServer is a server found via Crafty API for the Discover feature.

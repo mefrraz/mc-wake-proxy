@@ -21,6 +21,10 @@ type Config struct {
 	Servers     *ServersConfig
 	ServersPath string // path to servers.yml, set via env var SERVERS_CONFIG
 
+	// Node config (loaded from nodes.yml). nil = use env vars as default node.
+	Nodes     *NodesConfig
+	NodesPath string
+
 	// Backend Minecraft server, used in single-server mode.
 	BackendTarget string
 
@@ -63,6 +67,7 @@ func LoadConfig() (*Config, error) {
 		WebPort:            getEnv("WEB_PORT", "8080"),
 		Lang:               getEnv("PROXY_LANG", "en"),
 		ServersPath:        getEnv("SERVERS_CONFIG", "servers.yml"),
+		NodesPath:          getEnv("NODES_CONFIG", "nodes.yml"),
 		BackendTarget:      os.Getenv("BACKEND_TARGET"),
 		ProxmoxHost:        os.Getenv("PROXMOX_HOST"),
 		ProxmoxPort:        getEnv("PROXMOX_PORT", "8006"),
@@ -90,6 +95,23 @@ func LoadConfig() (*Config, error) {
 		return nil, err
 	}
 	cfg.Servers = servers
+
+	// Load nodes config, or migrate from env vars.
+	nodes, err := LoadNodes(cfg.NodesPath)
+	if err != nil {
+		return nil, err
+	}
+	if nodes == nil {
+		// Migrate from env vars to nodes.yml automatically.
+		if err := MigrateFromEnv(cfg.NodesPath, cfg); err != nil {
+			return nil, fmt.Errorf("migrate nodes: %w", err)
+		}
+		nodes, err = LoadNodes(cfg.NodesPath)
+		if err != nil {
+			return nil, err
+		}
+	}
+	cfg.Nodes = nodes
 
 	// Validate required fields.
 	missing := []string{}
