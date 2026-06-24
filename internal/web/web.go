@@ -21,7 +21,7 @@ var dashboardHTML embed.FS
 var logoPNG []byte
 
 // Start launches the HTTP dashboard server.
-func Start(state *proxy.State, addr, configPath, password string, reloadServers func(string) error, stopServer, restartServer, startServer func(string) error, sendCommand func(string, string) error, listServers func() ([]proxy.DiscoveredServer, error)) {
+func Start(state *proxy.State, addr, configPath, password string, reloadServers func(string) error, stopServer, restartServer, startServer func(string) error, sendCommand func(string, string) error, triggerWake func(string), listServers func() ([]proxy.DiscoveredServer, error)) {
 	mux := http.NewServeMux()
 
 	// Session token from password hash.
@@ -223,7 +223,9 @@ func Start(state *proxy.State, addr, configPath, password string, reloadServers 
 		if craftyID == "" { w.WriteHeader(404); return }
 		var err error
 		switch action {
-		case "start": err = startServer(craftyID)
+		case "start":
+			state.Logf("WEB: wake triggered for %s", hostname)
+			triggerWake(hostname)
 		case "stop":
 			state.SetPhaseForServer(hostname, proxy.PhaseStopping)
 			state.Logf("WEB: stopping %s", hostname)

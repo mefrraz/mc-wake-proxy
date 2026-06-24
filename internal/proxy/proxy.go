@@ -139,6 +139,22 @@ func (p *Proxy) ReloadServers(path string) error {
 // ConfigPath returns the servers config path.
 func (p *Proxy) ConfigPath() string { return p.cfg.ServersPath }
 
+// TriggerWake starts the wake chain for a specific server from the dashboard.
+func (p *Proxy) TriggerWake(hostname string) {
+	backend, craftyID, found := p.resolveServer(hostname)
+	if !found || backend == "" {
+		p.state.Logf("WAKE: unknown server %s", hostname)
+		return
+	}
+	if p.state.IsOnline(hostname) {
+		p.state.Logf("WAKE: %s already online", hostname)
+		return
+	}
+	p.state.SetPhaseForServer(hostname, PhaseWakingHost)
+	p.state.Logf("WAKE: dashboard triggered wake for %s", hostname)
+	go p.wakeSequence(hostname, backend, craftyID)
+}
+
 // StartAutoShutdown runs a background loop that stops idle servers.
 // If AUTO_SHUTDOWN_MINUTES > 0 and a server has 0 players for that duration,
 // the server is stopped via Crafty.

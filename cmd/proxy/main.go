@@ -112,7 +112,7 @@ func main() {
 	}
 
 	// Start dashboard in background.
-	go web.Start(state, cfg.WebPort, cfg.ServersPath, cfg.ProxyPassword, p.ReloadServers, cmClient.StopServer, cmClient.RestartServer, cmClient.StartServer, cmClient.SendCommand, discoverServers)
+	go web.Start(state, cfg.WebPort, cfg.ServersPath, cfg.ProxyPassword, p.ReloadServers, cmClient.StopServer, cmClient.RestartServer, cmClient.StartServer, cmClient.SendCommand, p.TriggerWake, discoverServers)
 
 	// Start backend health monitor.
 	p.StartMonitor()
